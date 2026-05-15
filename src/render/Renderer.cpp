@@ -1,5 +1,6 @@
 #include "render/Renderer.h"
 
+#include "theme/RuntimeTweaks.h"
 #include "theme/TahoeTheme.h"
 #include "window/SquircleGeometry.h"
 
@@ -175,7 +176,7 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
     if (!d2d_dc_ || !swap_chain_) return;
 
     const auto&  pal     = theme::ActivePalette();
-    const float  radius  = theme::ToPx(theme::kWindowCornerRadius, dpi_);
+    const float  radius  = theme::ToPx(theme::tweaks::gCornerRadius, dpi_);
     const float  width   = static_cast<float>(width_px_);
     const float  height  = static_cast<float>(height_px_);
 

@@ -60,6 +60,7 @@ set(MACTERMWIN_SOURCES
     src/ui/TrafficLights.cpp
 
     src/theme/TahoeTheme.cpp
+    src/theme/RuntimeTweaks.cpp
 )
 
 set(MACTERMWIN_HEADERS
@@ -76,6 +77,7 @@ set(MACTERMWIN_HEADERS
     src/ui/TrafficLights.h
 
     src/theme/TahoeTheme.h
+    src/theme/RuntimeTweaks.h
 )
 
 set(MACTERMWIN_RESOURCES
