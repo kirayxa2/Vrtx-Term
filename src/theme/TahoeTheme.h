@@ -43,16 +43,23 @@ inline constexpr float kSquircleSmoothing = 0.6f;
 // ---- Chrome metrics (logical pt) -------------------------------------------
 
 // Height of the draggable caption strip at the top of the window.
-inline constexpr float kCaptionHeight = 28.0f;
+//
+// Measured at ~30pt on the macOS 26 Tahoe Terminal reference screenshot
+// (12pt disc + 9pt of breathing room above and below).
+inline constexpr float kCaptionHeight = 30.0f;
 
 // Resize border thickness for hit-testing.
 inline constexpr float kResizeBorder = 6.0f;
 
-// Traffic-lights on a titlebar window (Terminal-class): 12pt circles, 8pt
-// apart, ~13pt from the left edge, vertically centred in the caption strip.
-inline constexpr float kTrafficLightDiameter = 12.0f;
+// Traffic-lights on a titlebar window (Terminal-class) in Tahoe.
+// Measured against the reference screenshot:
+//
+//     diameter ~ 11pt
+//     spacing  ~ 8pt   (gap between two adjacent discs)
+//     inset    ~ 11pt  (window edge to the left edge of the close disc)
+inline constexpr float kTrafficLightDiameter = 11.0f;
 inline constexpr float kTrafficLightSpacing  = 8.0f;
-inline constexpr float kTrafficLightInsetX   = 13.0f;
+inline constexpr float kTrafficLightInsetX   = 11.0f;
 
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
