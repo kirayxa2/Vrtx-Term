@@ -57,6 +57,7 @@ set(MACTERMWIN_SOURCES
 
     src/render/Renderer.cpp
     src/render/TerminalView.cpp
+    src/render/BoxDrawing.cpp
 
     src/terminal/ConPty.cpp
     src/terminal/TermBuffer.cpp
@@ -80,6 +81,7 @@ set(MACTERMWIN_HEADERS
 
     src/render/Renderer.h
     src/render/TerminalView.h
+    src/render/BoxDrawing.h
 
     src/terminal/ConPty.h
     src/terminal/TermBuffer.h

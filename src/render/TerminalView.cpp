@@ -1,5 +1,6 @@
 #include "render/TerminalView.h"
 
+#include "render/BoxDrawing.h"
 #include "theme/TahoeTheme.h"
 
 namespace mactw::render {
@@ -383,18 +384,26 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
                 ++runEnd;
             }
 
-            // Build the wide-string for the run.
+            // Build the wide-string for the run. Box-drawing and block
+            // glyphs are rendered ourselves via FillRectangle so they tile
+            // seamlessly across cells regardless of line-height; we set
+            // the codepoint to U+0020 in the run-text so DirectWrite skips
+            // it, then call box::DrawGlyph for that cell directly.
             runText.clear();
             bool anyVisible = false;
             for (int k = c; k < runEnd; ++k) {
                 char32_t cp = cells[r * cols + k].ch;
-                if (cp != U' ' && cp != 0) anyVisible = true;
-                if (cp <= 0xFFFF) {
-                    runText.push_back(static_cast<wchar_t>(cp));
+                const bool boxLike =
+                    box::IsBoxDrawing(cp) || box::IsBlockElement(cp);
+                if (!boxLike && cp != U' ' && cp != 0) anyVisible = true;
+
+                const char32_t emit = boxLike ? U' ' : cp;
+                if (emit <= 0xFFFF) {
+                    runText.push_back(static_cast<wchar_t>(emit));
                 } else {
-                    cp -= 0x10000;
-                    runText.push_back(static_cast<wchar_t>(0xD800 + (cp >> 10)));
-                    runText.push_back(static_cast<wchar_t>(0xDC00 + (cp & 0x3FF)));
+                    char32_t e = emit - 0x10000;
+                    runText.push_back(static_cast<wchar_t>(0xD800 + (e >> 10)));
+                    runText.push_back(static_cast<wchar_t>(0xDC00 + (e & 0x3FF)));
                 }
             }
 
@@ -415,6 +424,26 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
                               fmt, layoutRect, fillBrush.Get(),
                               D2D1_DRAW_TEXT_OPTIONS_CLIP |
                               D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+            }
+
+            // Box-drawing pass for this run. Each glyph is independent
+            // (no run-coalescing) since they're cheap rectangles. Stroke
+            // thickness scales with font size: roughly 7% of cell height
+            // for "light" and 18% for "heavy", clamped to >= 1px so the
+            // rasteriser doesn't drop them at small sizes.
+            const float lightPx = std::max(1.0f, std::round(cell_h_px_ * 0.07f));
+            const float heavyPx = std::max(2.0f, std::round(cell_h_px_ * 0.18f));
+            for (int k = c; k < runEnd; ++k) {
+                char32_t cp = cells[r * cols + k].ch;
+                if (!box::IsBoxDrawing(cp) && !box::IsBlockElement(cp)) continue;
+                fillBrush->SetColor(fg);
+                D2D1_RECT_F cellRect{
+                    originX + k * cell_w_px_,
+                    y,
+                    originX + (k + 1) * cell_w_px_,
+                    y + cell_h_px_,
+                };
+                box::DrawGlyph(dc, fillBrush.Get(), cellRect, cp, lightPx, heavyPx);
             }
 
             c = runEnd;
@@ -441,25 +470,34 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
             const auto& cellU = cells[cr * cols + cc];
             char32_t cp = cellU.ch;
             if (cp != 0 && cp != U' ') {
-                wchar_t buf2[2];
-                int len = 0;
-                if (cp <= 0xFFFF) {
-                    buf2[0] = static_cast<wchar_t>(cp);
-                    len = 1;
-                } else {
-                    cp -= 0x10000;
-                    buf2[0] = static_cast<wchar_t>(0xD800 + (cp >> 10));
-                    buf2[1] = static_cast<wchar_t>(0xDC00 + (cp & 0x3FF));
-                    len = 2;
-                }
                 const auto& bgC = pal.terminalBg;
                 fillBrush->SetColor(D2D1::ColorF(bgC.r, bgC.g, bgC.b, 1.0f));
-                IDWriteTextFormat* fmt = FormatFor(
-                    cellU.attrs &
-                    (terminal::attr::kBold | terminal::attr::kItalic));
-                dc->DrawTextW(buf2, len, fmt, r2, fillBrush.Get(),
-                              D2D1_DRAW_TEXT_OPTIONS_CLIP |
-                              D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+
+                // Box-drawing under the cursor: redraw via our own rect
+                // primitives so it tiles seamlessly with the next row.
+                if (box::IsBoxDrawing(cp) || box::IsBlockElement(cp)) {
+                    const float lightPx = std::max(1.0f, std::round(cell_h_px_ * 0.07f));
+                    const float heavyPx = std::max(2.0f, std::round(cell_h_px_ * 0.18f));
+                    box::DrawGlyph(dc, fillBrush.Get(), r2, cp, lightPx, heavyPx);
+                } else {
+                    wchar_t buf2[2];
+                    int len = 0;
+                    if (cp <= 0xFFFF) {
+                        buf2[0] = static_cast<wchar_t>(cp);
+                        len = 1;
+                    } else {
+                        cp -= 0x10000;
+                        buf2[0] = static_cast<wchar_t>(0xD800 + (cp >> 10));
+                        buf2[1] = static_cast<wchar_t>(0xDC00 + (cp & 0x3FF));
+                        len = 2;
+                    }
+                    IDWriteTextFormat* fmt = FormatFor(
+                        cellU.attrs &
+                        (terminal::attr::kBold | terminal::attr::kItalic));
+                    dc->DrawTextW(buf2, len, fmt, r2, fillBrush.Get(),
+                                  D2D1_DRAW_TEXT_OPTIONS_CLIP |
+                                  D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                }
             }
         } else {
             dc->DrawRectangle(r2, fillBrush.Get(), 1.0f);
