@@ -10,9 +10,17 @@
 #include <dwmapi.h>
 #include <uxtheme.h>
 
+// initguid.h emits the actual GUID bodies for COM CLSID/IID symbols
+// declared elsewhere with EXTERN_C. Without it, references like
+// CLSID_D2D1GaussianBlur are unresolved at link time. It MUST be
+// included exactly once in the project, and BEFORE any D2D / DXGI /
+// DComp header that declares those identifiers.
+#include <initguid.h>
+
 #include <d3d11.h>
 #include <dxgi1_3.h>
 #include <d2d1_3.h>
+#include <d2d1effects_2.h>
 #include <d2d1helper.h>
 #include <dwrite_3.h>
 #include <dcomp.h>
