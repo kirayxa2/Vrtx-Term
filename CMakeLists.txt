@@ -112,6 +112,14 @@ target_link_libraries(MacTermWin PRIVATE
     uxtheme
 )
 
+# We embed our own manifest via resources/app.rc (it sets PerMonitorV2 DPI
+# awareness). Tell the MSVC linker not to also auto-generate one, otherwise
+# the resource compiler errors out with CVT1100 ("duplicate resource") on the
+# RT_MANIFEST entry.
+if(MSVC)
+    target_link_options(MacTermWin PRIVATE "/MANIFEST:NO")
+endif()
+
 set_target_properties(MacTermWin PROPERTIES
     OUTPUT_NAME "MacTermWin"
     VS_DPI_AWARE "PerMonitor"
