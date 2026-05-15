@@ -82,9 +82,28 @@ void Renderer::Initialize(HWND hwnd) {
 
     EnsureSwapChain(hwnd);
 
+    // Initialise the terminal grid renderer with our DWrite factory.
+    terminal_view_.Initialize(dwrite_factory_.Get(), dpi_);
+
     ThrowIfFailed(dcomp_target_->SetRoot(dcomp_visual_.Get()),
                   "IDCompositionTarget::SetRoot");
     ThrowIfFailed(dcomp_device_->Commit(), "IDCompositionDevice::Commit");
+}
+
+void Renderer::SetDpi(UINT dpi) {
+    if (dpi == dpi_) return;
+    dpi_ = dpi;
+    terminal_view_.OnDpiChanged(dpi);
+}
+
+void Renderer::GridForCurrentSize(int& cols, int& rows) const {
+    const float marginPx  = theme::ToPx(theme::kShadowMargin,  dpi_);
+    const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
+    const float swW = std::max(1.0f, static_cast<float>(width_px_)  - 2.0f * marginPx);
+    const float swH = std::max(1.0f, static_cast<float>(height_px_) - 2.0f * marginPx);
+    const float contentW = swW;
+    const float contentH = std::max(1.0f, swH - captionPx);
+    terminal_view_.GridForContent(contentW, contentH, cols, rows);
 }
 
 void Renderer::EnsureSwapChain(HWND hwnd) {
@@ -267,6 +286,21 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
     d2d_dc_->CreateLayer(nullptr, layer.GetAddressOf());
     d2d_dc_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), squircle.Get()),
                        layer.Get());
+
+    // ---- Terminal grid ---------------------------------------------------
+    //
+    // Content area starts immediately below the caption strip and fills the
+    // remainder of the squircle. TerminalView adds its own padding inside.
+    if (session_) {
+        const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
+        D2D1_RECT_F contentRect{
+            0.0f,
+            captionPx,
+            swW,
+            swH,
+        };
+        terminal_view_.Draw(d2d_dc_.Get(), *session_, contentRect, windowActive);
+    }
 
     // Traffic lights produce squircle-local coordinates already; the active
     // transform places them inside the window correctly.

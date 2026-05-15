@@ -56,6 +56,13 @@ set(MACTERMWIN_SOURCES
     src/window/GlassEffect.cpp
 
     src/render/Renderer.cpp
+    src/render/TerminalView.cpp
+
+    src/terminal/ConPty.cpp
+    src/terminal/TermBuffer.cpp
+    src/terminal/TermInput.cpp
+    src/terminal/TerminalSession.cpp
+    src/terminal/VtParser.cpp
 
     src/ui/TrafficLights.cpp
 
@@ -72,6 +79,13 @@ set(MACTERMWIN_HEADERS
     src/window/GlassEffect.h
 
     src/render/Renderer.h
+    src/render/TerminalView.h
+
+    src/terminal/ConPty.h
+    src/terminal/TermBuffer.h
+    src/terminal/TermInput.h
+    src/terminal/TerminalSession.h
+    src/terminal/VtParser.h
 
     src/ui/TrafficLights.h
 

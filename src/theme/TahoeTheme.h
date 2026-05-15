@@ -76,6 +76,27 @@ inline constexpr float kTrafficLightInsetX   = 11.0f;
 inline constexpr int kDefaultWindowWidth  = 880;
 inline constexpr int kDefaultWindowHeight = 560;
 
+// ---- Terminal grid metrics -------------------------------------------------
+
+// Padding between the inner edge of the squircle and the first / last cell
+// of the grid. Apple's Terminal uses a generous left/right gutter; the top
+// gutter starts immediately below the caption strip.
+inline constexpr float kTerminalPaddingX = 12.0f;
+inline constexpr float kTerminalPaddingY =  8.0f;
+
+// Default monospace font. Cascadia Code ships with Windows 11 and is
+// installable on Windows 10. Fallback chain inside DirectWrite is handled
+// automatically when the requested face is missing.
+inline constexpr wchar_t kTerminalFontFamily[] = L"Cascadia Code";
+
+// Logical font size in pt. DirectWrite expects DIPs, which is the same
+// number on a 96-DPI display; we scale it manually for higher DPI.
+inline constexpr float kTerminalFontSize = 13.0f;
+
+// Line-height multiplier on top of the font's natural cell height. 1.20
+// gives macOS Terminal-like breathing room without looking sparse.
+inline constexpr float kTerminalLineHeight = 1.20f;
+
 // ---- Colors ----------------------------------------------------------------
 
 struct Color {
@@ -119,6 +140,19 @@ struct Palette {
     // Text
     Color text;
     Color textMuted;
+
+    // ANSI 16-color palette used by the terminal grid. Indices 0..7 are the
+    // standard SGR 30..37 colors, 8..15 are the bright variants (SGR 90..97
+    // and bold-as-bright fallback).
+    Color ansi[16];
+
+    // Default foreground / background for the terminal grid (used when a
+    // cell's `fg` / `bg` are SGR 39 / 49 -> "default"). Keeping these
+    // separate from .text / .windowTint lets the terminal visually deviate
+    // from the chrome (e.g. a slightly different black for the body).
+    Color terminalFg;
+    Color terminalBg;
+    Color cursor;              // block cursor color when window is focused
 };
 
 // Apple-flavored dark palette. Values measured visually against macOS Tahoe
@@ -140,6 +174,29 @@ inline constexpr Palette kDarkPalette{
 
     .text      = Color::FromARGB(0xFFEDEDEF),
     .textMuted = Color::FromARGB(0x99EDEDEF),
+
+    // ANSI 16: macOS Terminal "Pro" scheme, slightly desaturated for dark bg.
+    .ansi = {
+        Color::FromARGB(0xFF1C1C1F),  //  0 black
+        Color::FromARGB(0xFFE05561),  //  1 red
+        Color::FromARGB(0xFF5BC273),  //  2 green
+        Color::FromARGB(0xFFE2B86B),  //  3 yellow
+        Color::FromARGB(0xFF6CA8E2),  //  4 blue
+        Color::FromARGB(0xFFC678DD),  //  5 magenta
+        Color::FromARGB(0xFF56B6C2),  //  6 cyan
+        Color::FromARGB(0xFFEDEDEF),  //  7 white  (default fg)
+        Color::FromARGB(0xFF5C6370),  //  8 bright black
+        Color::FromARGB(0xFFFF7B85),  //  9 bright red
+        Color::FromARGB(0xFF7BD893),  // 10 bright green
+        Color::FromARGB(0xFFFFD479),  // 11 bright yellow
+        Color::FromARGB(0xFF89C2FF),  // 12 bright blue
+        Color::FromARGB(0xFFD68FF1),  // 13 bright magenta
+        Color::FromARGB(0xFF7CCEDB),  // 14 bright cyan
+        Color::FromARGB(0xFFFFFFFF),  // 15 bright white
+    },
+    .terminalFg = Color::FromARGB(0xFFEDEDEF),
+    .terminalBg = Color::FromARGB(0xFF1C1C1F),
+    .cursor     = Color::FromARGB(0xCCEDEDEF),
 };
 
 // Light palette (for future "Tahoe Light" theme). Currently unused; kept here
@@ -157,6 +214,28 @@ inline constexpr Palette kLightPalette{
 
     .text      = Color::FromARGB(0xFF1A1A1C),
     .textMuted = Color::FromARGB(0x991A1A1C),
+
+    .ansi = {
+        Color::FromARGB(0xFF000000),  //  0 black
+        Color::FromARGB(0xFFC2261B),  //  1 red
+        Color::FromARGB(0xFF2A8A3E),  //  2 green
+        Color::FromARGB(0xFFB58205),  //  3 yellow
+        Color::FromARGB(0xFF1F6FEB),  //  4 blue
+        Color::FromARGB(0xFFA64BCB),  //  5 magenta
+        Color::FromARGB(0xFF008B94),  //  6 cyan
+        Color::FromARGB(0xFFCCCCCC),  //  7 white
+        Color::FromARGB(0xFF7F7F7F),  //  8 bright black
+        Color::FromARGB(0xFFE5483D),  //  9 bright red
+        Color::FromARGB(0xFF3FBE5C),  // 10 bright green
+        Color::FromARGB(0xFFD9A300),  // 11 bright yellow
+        Color::FromARGB(0xFF4287F5),  // 12 bright blue
+        Color::FromARGB(0xFFC066E0),  // 13 bright magenta
+        Color::FromARGB(0xFF2EBAC1),  // 14 bright cyan
+        Color::FromARGB(0xFFFFFFFF),  // 15 bright white
+    },
+    .terminalFg = Color::FromARGB(0xFF1A1A1C),
+    .terminalBg = Color::FromARGB(0xFFFAFAFC),
+    .cursor     = Color::FromARGB(0xCC1A1A1C),
 };
 
 // Currently active palette. We only ship dark for the MVP; the runtime toggle

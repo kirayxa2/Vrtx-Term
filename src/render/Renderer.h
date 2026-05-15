@@ -29,6 +29,8 @@
 #pragma once
 
 #include "pch.h"
+#include "render/TerminalView.h"
+#include "terminal/TerminalSession.h"
 #include "ui/TrafficLights.h"
 
 namespace mactw::render {
@@ -41,7 +43,15 @@ public:
     void Resize(UINT widthPx, UINT heightPx);
 
     // Update DPI scale; call before Render() after WM_DPICHANGED.
-    void SetDpi(UINT dpi) { dpi_ = dpi; }
+    void SetDpi(UINT dpi);
+
+    // Optional terminal session. Renderer does not own it.
+    void SetSession(terminal::TerminalSession* session) { session_ = session; }
+
+    // Compute the (cols, rows) that fit inside the squircle's content area
+    // (i.e. squircle minus caption strip minus terminal padding) at the
+    // current backbuffer size + DPI. Used by the window when sizing the pty.
+    void GridForCurrentSize(int& cols, int& rows) const;
 
     // Paint one frame.
     void Render(bool windowActive, ui::TrafficLights& trafficLights);
@@ -82,6 +92,10 @@ private:
     ComPtr<IDCompositionDevice>  dcomp_device_;
     ComPtr<IDCompositionTarget>  dcomp_target_;
     ComPtr<IDCompositionVisual>  dcomp_visual_;
+
+    // Terminal grid renderer (owns DWrite text formats).
+    TerminalView terminal_view_;
+    terminal::TerminalSession* session_{nullptr};
 };
 
 }  // namespace mactw::render
