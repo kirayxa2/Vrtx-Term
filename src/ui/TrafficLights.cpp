@@ -1,7 +1,5 @@
 #include "ui/TrafficLights.h"
 
-#include "theme/RuntimeTweaks.h"
-
 namespace mactw::ui {
 
 namespace {
@@ -21,11 +19,11 @@ inline float Distance(D2D1_POINT_2F a, D2D1_POINT_2F b) {
 void TrafficLights::UpdateLayout(UINT dpi) {
     using namespace theme;
 
-    const float diameter = ToPx(tweaks::gTlDiameter, dpi);
+    const float diameter = ToPx(kTrafficLightDiameter, dpi);
     const float radius   = diameter * 0.5f;
-    const float spacing  = ToPx(tweaks::gTlSpacing,  dpi);
-    const float insetX   = ToPx(tweaks::gTlInsetX,   dpi);
-    const float captionH = ToPx(tweaks::gCaptionHeight, dpi);
+    const float spacing  = ToPx(kTrafficLightSpacing,  dpi);
+    const float insetX   = ToPx(kTrafficLightInsetX,   dpi);
+    const float captionH = ToPx(kCaptionHeight,        dpi);
 
     // Vertically centre the disc row inside the caption strip.
     const float centerY = captionH * 0.5f;

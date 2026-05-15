@@ -41,25 +41,26 @@ inline constexpr float kSquircleSmoothing = 0.6f;
 // as a D2D shadow effect rendered behind the squircle.
 
 // ---- Chrome metrics (logical pt) -------------------------------------------
+//
+// These five values were dialled in by hand against side-by-side reference
+// screenshots of macOS 26 Tahoe Terminal on the live tweaker (`[`/`]` etc.,
+// since removed). They are the final shipping numbers; do not "round" them
+// to the Apple HIG canonical values - the HIG values look slightly off at
+// our DPI / scale.
 
 // Height of the draggable caption strip at the top of the window.
-//
-// Measured at ~30pt on the macOS 26 Tahoe Terminal reference screenshot
-// (12pt disc + 9pt of breathing room above and below).
-inline constexpr float kCaptionHeight = 30.0f;
+inline constexpr float kCaptionHeight = 31.0f;
 
 // Resize border thickness for hit-testing.
 inline constexpr float kResizeBorder = 6.0f;
 
-// Traffic-lights, Apple HIG canonical values for Tahoe Titlebar windows:
-//
-//     diameter        12 pt
-//     centre-to-centre 20 pt   (so edge-to-edge gap = 8 pt)
-//     centre inset    20 pt    (so the first disc's left edge is 14 pt
-//                                from the window edge)
-inline constexpr float kTrafficLightDiameter = 12.0f;
-inline constexpr float kTrafficLightSpacing  = 8.0f;
-inline constexpr float kTrafficLightInsetX   = 14.0f;
+// Traffic-lights:
+//     diameter        13 pt
+//     edge-to-edge     10 pt   (gap between adjacent discs)
+//     left inset      11 pt    (window edge to left edge of first disc)
+inline constexpr float kTrafficLightDiameter = 13.0f;
+inline constexpr float kTrafficLightSpacing  = 10.0f;
+inline constexpr float kTrafficLightInsetX   = 11.0f;
 
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
