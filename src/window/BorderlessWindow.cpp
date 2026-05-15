@@ -1,5 +1,6 @@
 #include "window/BorderlessWindow.h"
 
+#include "terminal/TermInput.h"
 #include "theme/TahoeTheme.h"
 #include "window/SquircleGeometry.h"
 
@@ -8,6 +9,10 @@ namespace mactw::window {
 namespace {
 
 constexpr wchar_t kClassName[] = L"MacTermWin.BorderlessWindow";
+
+// Custom message we post from the pty reader thread to nudge the UI to
+// repaint. WM_APP is the documented base for app-private messages.
+constexpr UINT WM_APP_PTY_DIRTY = WM_APP + 1;
 
 // Get per-monitor DPI; falls back to 96 only on pre-1607 systems.
 UINT GetWindowDpiSafe(HWND hwnd) {
@@ -134,6 +139,38 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
 
 // ---------------------------------------------------------------------------
 
+void BorderlessWindow::SetSession(terminal::TerminalSession* s) {
+    session_ = s;
+    renderer_.SetSession(s);
+
+    if (s && hwnd_) {
+        // The reader thread may fire from any thread - PostMessage is
+        // thread-safe and queues a wake-up onto the UI thread.
+        const HWND hwndCopy = hwnd_;
+        s->SetScheduleRepaint([hwndCopy]() {
+            ::PostMessageW(hwndCopy, WM_APP_PTY_DIRTY, 0, 0);
+        });
+
+        // Push the current grid size into the pty so the shell is sized
+        // correctly from the very first prompt.
+        SyncPtyToSize();
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+void BorderlessWindow::SyncPtyToSize() {
+    if (!session_) return;
+    int cols = 0, rows = 0;
+    renderer_.GridForCurrentSize(cols, rows);
+    if (cols == last_cols_ && rows == last_rows_) return;
+    last_cols_ = cols;
+    last_rows_ = rows;
+    session_->Resize(cols, rows);
+}
+
+// ---------------------------------------------------------------------------
+
 void BorderlessWindow::OnDpiChanged(UINT newDpi, const RECT* suggested) {
     dpi_ = newDpi;
     if (suggested) {
@@ -238,14 +275,61 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_SIZE:
             renderer_.Resize(LOWORD(lp), HIWORD(lp));
+            SyncPtyToSize();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
 
         case WM_DPICHANGED: {
             const UINT newDpi = HIWORD(wp);
             OnDpiChanged(newDpi, reinterpret_cast<const RECT*>(lp));
+            SyncPtyToSize();
             return 0;
         }
+
+        // ---- Keyboard input -----------------------------------------------
+        //
+        // System keys (WM_SYSKEY*) carry Alt-modified strokes; we want them
+        // forwarded to the shell, not handled by DefWindowProc (which would
+        // open the system menu on Alt+space etc.).
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN: {
+            if (!session_) break;
+            const uint8_t mods = terminal::CurrentModifiers();
+            char buf[16];
+            const size_t n = terminal::TranslateVirtualKey(wp, mods, buf,
+                                                            sizeof(buf));
+            if (n > 0) {
+                session_->SendInput(buf, n);
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+                // Eat the message so DefWindowProc doesn't get it.
+                return 0;
+            }
+            // No VT mapping; let TranslateMessage produce WM_CHAR.
+            break;
+        }
+
+        case WM_CHAR:
+        case WM_SYSCHAR: {
+            if (!session_) break;
+            char buf[8];
+            const size_t n = terminal::TranslateChar(static_cast<wchar_t>(wp),
+                                                     buf, sizeof(buf));
+            if (n > 0) {
+                session_->SendInput(buf, n);
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+            }
+            return 0;
+        }
+
+        // ---- Pty reader -> UI bridge --------------------------------------
+        case WM_APP_PTY_DIRTY:
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            return 0;
+
+        case WM_SETFOCUS:
+        case WM_KILLFOCUS:
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
 
         case WM_MOUSEMOVE: {
             const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);

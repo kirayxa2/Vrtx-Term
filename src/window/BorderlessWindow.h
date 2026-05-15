@@ -26,6 +26,7 @@
 
 #include "pch.h"
 #include "render/Renderer.h"
+#include "terminal/TerminalSession.h"
 #include "ui/TrafficLights.h"
 
 namespace mactw::window {
@@ -41,6 +42,11 @@ public:
     HWND Create(HINSTANCE hInstance, const wchar_t* title);
     HWND Hwnd() const { return hwnd_; }
 
+    // Bind a terminal session. The window forwards keystrokes to it,
+    // notifies it on resize, and asks the renderer to draw it. May be
+    // null (the window then renders an empty squircle).
+    void SetSession(terminal::TerminalSession* s);
+
 private:
     static LRESULT CALLBACK StaticWndProc(HWND, UINT, WPARAM, LPARAM);
     LRESULT WndProc(UINT msg, WPARAM wp, LPARAM lp);
@@ -48,13 +54,23 @@ private:
     LRESULT HitTest(POINT screenPt) const;
     void OnDpiChanged(UINT newDpi, const RECT* suggested);
 
+    // Recompute (cols, rows) for the current swap-chain size and notify the
+    // session if the grid actually changed.
+    void SyncPtyToSize();
+
     HWND      hwnd_   {nullptr};
     HINSTANCE hinst_  {nullptr};
     UINT      dpi_    {96};
     bool      active_ {true};
 
-    render::Renderer  renderer_;
-    ui::TrafficLights traffic_;
+    // Last (cols, rows) we told the pty. Used to avoid spamming
+    // ResizePseudoConsole on every WM_SIZE that doesn't change the grid.
+    int       last_cols_{0};
+    int       last_rows_{0};
+
+    render::Renderer            renderer_;
+    ui::TrafficLights           traffic_;
+    terminal::TerminalSession*  session_{nullptr};
 };
 
 }  // namespace mactw::window
