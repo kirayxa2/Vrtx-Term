@@ -57,6 +57,19 @@ LRESULT CALLBACK BorderlessWindow::StaticWndProc(HWND hwnd, UINT msg,
 HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     hinst_ = hInstance;
 
+    auto trace = [](const char* msg) {
+        wchar_t tempDir[MAX_PATH] = {};
+        if (!::GetTempPathW(MAX_PATH, tempDir)) return;
+        wchar_t path[MAX_PATH] = {};
+        std::swprintf(path, MAX_PATH, L"%smactermwin.log", tempDir);
+        FILE* f = nullptr;
+        if (_wfopen_s(&f, path, L"a") == 0 && f) {
+            std::fprintf(f, "  win: %s\n", msg);
+            std::fclose(f);
+        }
+    };
+    trace("Create() entered");
+
     WNDCLASSEXW wc{};
     wc.cbSize        = sizeof(wc);
     wc.style         = CS_HREDRAW | CS_VREDRAW;
@@ -66,6 +79,7 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     wc.hbrBackground = nullptr;  // we paint everything
     wc.lpszClassName = kClassName;
     ::RegisterClassExW(&wc);
+    trace("class registered");
 
     // Initial DPI of the primary monitor.
     dpi_ = ::GetDpiForSystem();
@@ -73,9 +87,6 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     const int wPx = theme::ToPxInt(theme::kDefaultWindowWidth,  dpi_);
     const int hPx = theme::ToPxInt(theme::kDefaultWindowHeight, dpi_);
 
-    // WS_THICKFRAME keeps system resize behavior (Aero Snap, drag edges).
-    // WS_CAPTION + WS_SYSMENU keep min/max animations and taskbar previews.
-    // We will trim *all* the visible frame in WM_NCCALCSIZE.
     constexpr DWORD style   = WS_OVERLAPPEDWINDOW;
     constexpr DWORD exStyle = 0;
 
@@ -87,32 +98,37 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     if (!hwnd) {
         throw std::runtime_error("CreateWindowExW failed");
     }
+    trace("hwnd created");
 
-    // Real DPI of the actual monitor the window landed on.
     dpi_ = GetWindowDpiSafe(hwnd);
 
-    // Tell DWM to render a tiny extended frame, which gives us a soft drop
-    // shadow even though we removed the visible non-client area.
     MARGINS m{0, 0, 1, 0};
     ::DwmExtendFrameIntoClientArea(hwnd, &m);
+    trace("DWM extended");
 
-    // Force NCCALCSIZE re-evaluation now that the HWND exists.
     ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
                    SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
                        SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+    trace("frame changed");
 
-    // Renderer + traffic lights need their physical-pixel state.
     renderer_.SetDpi(dpi_);
+    trace("calling renderer init");
     renderer_.Initialize(hwnd);
-    traffic_.UpdateLayout(dpi_);
+    trace("renderer init done");
 
-    // Acrylic blur backdrop. It's safe even if the call no-ops on old systems.
+    traffic_.UpdateLayout(dpi_);
+    trace("traffic layout done");
+
+    // Acrylic blur backdrop. Safe to no-op on systems that lack the API.
     ApplyAcrylicBackdrop(hwnd);
+    trace("acrylic applied");
 
     UpdateWindowRegion();
+    trace("region applied");
 
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
+    trace("window shown");
 
     return hwnd;
 }
