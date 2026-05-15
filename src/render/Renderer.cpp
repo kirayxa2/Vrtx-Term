@@ -1,6 +1,5 @@
 #include "render/Renderer.h"
 
-#include "theme/RuntimeTweaks.h"
 #include "theme/TahoeTheme.h"
 #include "window/SquircleGeometry.h"
 
@@ -176,7 +175,7 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
     if (!d2d_dc_ || !swap_chain_) return;
 
     const auto&  pal     = theme::ActivePalette();
-    const float  radius  = theme::ToPx(theme::tweaks::gCornerRadius, dpi_);
+    const float  radius  = theme::ToPx(theme::kWindowCornerRadius, dpi_);
     const float  width   = static_cast<float>(width_px_);
     const float  height  = static_cast<float>(height_px_);
 
@@ -205,43 +204,6 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
     // Traffic lights.
     trafficLights.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
                          windowActive);
-
-    // ---- Live-tweak readout (dev only) -----------------------------------
-    //
-    // While the live tweaker is on, print the current 5 metric values in
-    // the centre of the window so the user can copy them down once they
-    // have dialled in the look they like.
-    {
-        ComPtr<IDWriteTextFormat> fmt;
-        const wchar_t* fontFamilies[] = {L"Cascadia Code", L"Consolas"};
-        for (const wchar_t* family : fontFamilies) {
-            if (SUCCEEDED(dwrite_factory_->CreateTextFormat(
-                    family, nullptr, DWRITE_FONT_WEIGHT_REGULAR,
-                    DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                    13.0f * dpi_ / 96.0f, L"en-us", fmt.GetAddressOf()))) {
-                break;
-            }
-        }
-        if (fmt) {
-            fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-            wchar_t buf[256];
-            std::swprintf(
-                buf, ARRAYSIZE(buf),
-                L"radius %.0f pt    diameter %.0f pt    spacing %.0f pt    "
-                L"inset %.0f pt    caption %.0f pt",
-                static_cast<double>(theme::tweaks::gCornerRadius),
-                static_cast<double>(theme::tweaks::gTlDiameter),
-                static_cast<double>(theme::tweaks::gTlSpacing),
-                static_cast<double>(theme::tweaks::gTlInsetX),
-                static_cast<double>(theme::tweaks::gCaptionHeight));
-            brush_->SetColor(ToD2D(pal.textMuted));
-            d2d_dc_->DrawText(buf, static_cast<UINT32>(wcslen(buf)),
-                              fmt.Get(),
-                              D2D1::RectF(0, 0, width, height),
-                              brush_.Get());
-        }
-    }
 
     d2d_dc_->PopLayer();
 

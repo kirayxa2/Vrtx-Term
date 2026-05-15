@@ -1,6 +1,5 @@
 #include "window/BorderlessWindow.h"
 
-#include "theme/RuntimeTweaks.h"
 #include "theme/TahoeTheme.h"
 #include "window/SquircleGeometry.h"
 
@@ -151,7 +150,7 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
     ::GetWindowRect(hwnd_, &rc);
 
     const int border = theme::ToPxInt(theme::kResizeBorder, dpi_);
-    const int captionHpx = theme::ToPxInt(theme::tweaks::gCaptionHeight, dpi_);
+    const int captionHpx = theme::ToPxInt(theme::kCaptionHeight, dpi_);
 
     const bool top    = pt.y < rc.top    + border;
     const bool bottom = pt.y >= rc.bottom - border;
@@ -225,17 +224,6 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const UINT newDpi = HIWORD(wp);
             OnDpiChanged(newDpi, reinterpret_cast<const RECT*>(lp));
             return 0;
-        }
-
-        // Dev-only live tweaks. See RuntimeTweaks.h for the key bindings.
-        case WM_KEYDOWN: {
-            const bool shift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
-            if (theme::tweaks::HandleKey(wp, shift)) {
-                traffic_.UpdateLayout(dpi_);
-                ::InvalidateRect(hwnd_, nullptr, FALSE);
-                return 0;
-            }
-            break;
         }
 
         case WM_MOUSEMOVE: {
