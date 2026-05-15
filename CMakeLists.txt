@@ -64,6 +64,7 @@ set(MACTERMWIN_SOURCES
     src/terminal/TermInput.cpp
     src/terminal/TerminalSession.cpp
     src/terminal/VtParser.cpp
+    src/terminal/Profile.cpp
 
     src/ui/TrafficLights.cpp
 
@@ -88,6 +89,7 @@ set(MACTERMWIN_HEADERS
     src/terminal/TermInput.h
     src/terminal/TerminalSession.h
     src/terminal/VtParser.h
+    src/terminal/Profile.h
 
     src/ui/TrafficLights.h
 

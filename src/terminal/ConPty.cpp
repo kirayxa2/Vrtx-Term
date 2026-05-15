@@ -1,5 +1,7 @@
 #include "terminal/ConPty.h"
 
+#include "terminal/Profile.h"
+
 #include <cstdio>
 
 namespace mactw::terminal {
@@ -25,6 +27,34 @@ std::wstring EnvVar(const wchar_t* name) {
     DWORD n = ::GetEnvironmentVariableW(name, buf, 1024);
     if (n == 0 || n >= 1024) return L"";
     return std::wstring(buf, n);
+}
+
+// True when `path` ends in pwsh.exe or powershell.exe (case-insensitive).
+// Used to decide whether to inject our default profile.
+bool IsPowerShell(const std::wstring& path) {
+    auto lower = [](std::wstring s) {
+        for (auto& c : s) c = static_cast<wchar_t>(::towlower(c));
+        return s;
+    };
+    const std::wstring lp = lower(path);
+    return lp.size() >= 8 &&
+           (lp.rfind(L"pwsh.exe")       == lp.size() - 8 ||
+            lp.rfind(L"powershell.exe") == lp.size() - 14);
+}
+
+// Quote a path for inclusion on a Windows command line. We always emit
+// double-quotes; embedded quotes are escaped per CommandLineToArgvW
+// rules (back-slash escaping). Good enough for filesystem paths.
+std::wstring QuoteArg(const std::wstring& s) {
+    std::wstring out;
+    out.reserve(s.size() + 2);
+    out.push_back(L'"');
+    for (wchar_t c : s) {
+        if (c == L'"') out.push_back(L'\\');
+        out.push_back(c);
+    }
+    out.push_back(L'"');
+    return out;
 }
 
 }  // namespace
@@ -126,7 +156,29 @@ bool ConPty::Start(int cols, int rows, const std::wstring& cmdline) {
 
     // 2) Resolve shell + build command line.
     shell_path_ = cmdline.empty() ? ResolveShell() : cmdline;
-    std::wstring mutableCmd = shell_path_;  // CreateProcessW may modify the buffer.
+
+    // For PowerShell we inject our own minimal profile (rounded prompt,
+    // no oh-my-posh, no winfetch). The user's $PROFILE is suppressed via
+    // -NoProfile so we get a deterministic look out of the box. cmd.exe
+    // and any caller-supplied custom command line are launched as-is.
+    std::wstring fullCmd;
+    if (cmdline.empty() && IsPowerShell(shell_path_)) {
+        const std::wstring profile = EnsureDefaultPwshProfile();
+        fullCmd = QuoteArg(shell_path_);
+        fullCmd += L" -NoLogo -NoProfile -NoExit";
+        if (!profile.empty()) {
+            // -File runs the script and stays interactive thanks to
+            // -NoExit; we cannot use -File on Windows PowerShell 5.1
+            // together with -NoExit reliably, so we use `. <path>` via
+            // -Command which works on both pwsh 7+ and powershell 5.1.
+            fullCmd += L" -Command \". '";
+            fullCmd += profile;
+            fullCmd += L"'\"";
+        }
+    } else {
+        fullCmd = shell_path_;
+    }
+    std::wstring mutableCmd = fullCmd;  // CreateProcessW may modify the buffer.
 
     // 3) STARTUPINFOEX with the pseudo-console attribute attached.
     STARTUPINFOEXW si{};

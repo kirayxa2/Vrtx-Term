@@ -22,6 +22,7 @@ namespace {
 //   U+251C ├   U+2524 ┤   T-junctions (right, left)
 //   U+252C ┬   U+2534 ┴   T-junctions (down, up)
 //   U+253C ┼   cross
+//   U+256D ╭   U+256E ╮   U+256F ╯   U+2570 ╰   rounded corners
 //
 // Naming convention for the table below: each entry's four numbers are
 // (n, e, s, w), each in {0, 1, 2} for absent / light / heavy.
@@ -148,11 +149,90 @@ bool DrawBlock(ID2D1DeviceContext* dc,
     return true;
 }
 
+// Rounded corners: U+256D..U+2570. Drawn as a stroked path:
+// "leg straight to start of arc -> 90 deg quarter-circle -> leg straight
+// to opposite cell edge". Stroke width = lightPx so the result joins
+// pixel-perfect with neighbouring straight cells of the same weight.
+bool DrawRoundedCorner(ID2D1DeviceContext* dc,
+                       ID2D1SolidColorBrush* brush,
+                       D2D1_RECT_F cell,
+                       char32_t cp,
+                       float lightPx) {
+    if (cp < 0x256D || cp > 0x2570) return false;
+
+    ComPtr<ID2D1Factory> factory;
+    dc->GetFactory(factory.GetAddressOf());
+    if (!factory) return false;
+
+    ComPtr<ID2D1PathGeometry> path;
+    if (FAILED(factory->CreatePathGeometry(path.GetAddressOf()))) return false;
+
+    ComPtr<ID2D1GeometrySink> sink;
+    if (FAILED(path->Open(sink.GetAddressOf()))) return false;
+
+    const float cx = (cell.left + cell.right)  * 0.5f;
+    const float cy = (cell.top  + cell.bottom) * 0.5f;
+    // Radius is roughly 35% of the smaller half-cell, which gives a
+    // visibly rounded but not exaggerated curve at typical font sizes.
+    const float halfMin = std::min(cell.right - cx, cell.bottom - cy);
+    const float R = std::max(2.0f, halfMin * 0.7f);
+
+    D2D1_POINT_2F start{}, mid_before{}, mid_after{}, finish{};
+    D2D1_SWEEP_DIRECTION sweep = D2D1_SWEEP_DIRECTION_CLOCKWISE;
+
+    // Geometry per glyph. The "horizontal leg" runs from the matching
+    // cell edge to (cx +/- R, cy); the arc curves into the corner; the
+    // "vertical leg" runs from (cx, cy +/- R) to the opposite edge.
+    switch (cp) {
+        case 0x256D:  // ╭  east leg + south leg, curve in top-left direction
+            start      = {cell.right,  cy};
+            mid_before = {cx + R,      cy};
+            mid_after  = {cx,          cy + R};
+            finish     = {cx,          cell.bottom};
+            sweep      = D2D1_SWEEP_DIRECTION_CLOCKWISE;
+            break;
+        case 0x256E:  // ╮  west leg + south leg, curve in top-right direction
+            start      = {cell.left,   cy};
+            mid_before = {cx - R,      cy};
+            mid_after  = {cx,          cy + R};
+            finish     = {cx,          cell.bottom};
+            sweep      = D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE;
+            break;
+        case 0x256F:  // ╯  west leg + north leg, curve in bottom-right direction
+            start      = {cell.left,   cy};
+            mid_before = {cx - R,      cy};
+            mid_after  = {cx,          cy - R};
+            finish     = {cx,          cell.top};
+            sweep      = D2D1_SWEEP_DIRECTION_CLOCKWISE;
+            break;
+        case 0x2570:  // ╰  east leg + north leg, curve in bottom-left direction
+            start      = {cell.right,  cy};
+            mid_before = {cx + R,      cy};
+            mid_after  = {cx,          cy - R};
+            finish     = {cx,          cell.top};
+            sweep      = D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE;
+            break;
+        default:
+            sink->Close();
+            return false;
+    }
+
+    sink->BeginFigure(start, D2D1_FIGURE_BEGIN_HOLLOW);
+    sink->AddLine(mid_before);
+    sink->AddArc(D2D1::ArcSegment(mid_after,
+                                  D2D1::SizeF(R, R),
+                                  /*rotationAngle=*/0.0f,
+                                  sweep,
+                                  D2D1_ARC_SIZE_SMALL));
+    sink->AddLine(finish);
+    sink->EndFigure(D2D1_FIGURE_END_OPEN);
+    sink->Close();
+
+    dc->DrawGeometry(path.Get(), brush, lightPx);
+    return true;
+}
+
 }  // namespace
-
-// ---------------------------------------------------------------------------
-
-bool IsBoxDrawing(char32_t cp) {
     return cp >= 0x2500 && cp <= 0x257F;
 }
 
@@ -167,6 +247,7 @@ bool DrawGlyph(ID2D1DeviceContext* dc,
                float lightPx,
                float heavyPx) {
     if (DrawBlock(dc, brush, cell, cp)) return true;
+    if (DrawRoundedCorner(dc, brush, cell, cp, lightPx)) return true;
 
     const Legs g = LookupLegs(cp);
     if (g.n == 0 && g.e == 0 && g.s == 0 && g.w == 0) {
