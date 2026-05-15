@@ -51,15 +51,15 @@ inline constexpr float kCaptionHeight = 30.0f;
 // Resize border thickness for hit-testing.
 inline constexpr float kResizeBorder = 6.0f;
 
-// Traffic-lights on a titlebar window (Terminal-class) in Tahoe.
-// Measured against the reference screenshot:
+// Traffic-lights, Apple HIG canonical values for Tahoe Titlebar windows:
 //
-//     diameter ~ 11pt
-//     spacing  ~ 8pt   (gap between two adjacent discs)
-//     inset    ~ 11pt  (window edge to the left edge of the close disc)
-inline constexpr float kTrafficLightDiameter = 11.0f;
+//     diameter        12 pt
+//     centre-to-centre 20 pt   (so edge-to-edge gap = 8 pt)
+//     centre inset    20 pt    (so the first disc's left edge is 14 pt
+//                                from the window edge)
+inline constexpr float kTrafficLightDiameter = 12.0f;
 inline constexpr float kTrafficLightSpacing  = 8.0f;
-inline constexpr float kTrafficLightInsetX   = 11.0f;
+inline constexpr float kTrafficLightInsetX   = 14.0f;
 
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
