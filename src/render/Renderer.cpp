@@ -17,14 +17,15 @@ void Renderer::Initialize(HWND hwnd) {
     hwnd_ = hwnd;
 
     // ---- D3D11 + DXGI ------------------------------------------------------
-    UINT createFlags = 0;
-#if !defined(NDEBUG)
-    createFlags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-    createFlags |= D3D11_CREATE_DEVICE_BGRA_SUPPORT;  // required for D2D
+    //
+    // We deliberately do NOT request the D3D11 debug layer even in debug
+    // builds. It requires the optional "Graphics Tools" Windows feature; if
+    // it's missing the create call fails with DXGI_ERROR_SDK_COMPONENT_MISSING.
+    UINT createFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;  // required for D2D
 
     const D3D_FEATURE_LEVEL featureLevels[] = {
         D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_9_3,
     };
 
     HRESULT hr = ::D3D11CreateDevice(
@@ -33,20 +34,17 @@ void Renderer::Initialize(HWND hwnd) {
         d3d_device_.GetAddressOf(), nullptr, d3d_context_.GetAddressOf());
 
     if (FAILED(hr)) {
-        // Fall back to WARP if the GPU rejects us (e.g. no hardware acceleration).
+        // Fall back to WARP for software rendering (RDP, headless VMs, GPUs
+        // that don't expose DX11).
         hr = ::D3D11CreateDevice(
-            nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
-            createFlags & ~D3D11_CREATE_DEVICE_DEBUG, featureLevels,
-            ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
+            nullptr, D3D_DRIVER_TYPE_WARP, nullptr, createFlags,
+            featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
             d3d_device_.GetAddressOf(), nullptr, d3d_context_.GetAddressOf());
-        ThrowIfFailed(hr, "D3D11CreateDevice (WARP)");
+        ThrowIfFailed(hr, "D3D11CreateDevice (WARP fallback)");
     }
 
     // ---- D2D factory + device ---------------------------------------------
     D2D1_FACTORY_OPTIONS factoryOptions{};
-#if !defined(NDEBUG)
-    factoryOptions.debugLevel = D2D1_DEBUG_LEVEL_INFORMATION;
-#endif
     ThrowIfFailed(::D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
                                       __uuidof(ID2D1Factory1), &factoryOptions,
                                       reinterpret_cast<void**>(d2d_factory_.GetAddressOf())),
@@ -87,17 +85,19 @@ void Renderer::EnsureSwapChain(HWND hwnd) {
     height_px_ = std::max<UINT>(1, rc.bottom - rc.top);
 
     DXGI_SWAP_CHAIN_DESC1 desc{};
-    desc.Width       = width_px_;
-    desc.Height      = height_px_;
-    desc.Format      = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.Width            = width_px_;
+    desc.Height           = height_px_;
+    desc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM;
     desc.SampleDesc.Count = 1;
-    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    desc.BufferCount = 2;
-    desc.SwapEffect  = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-    desc.AlphaMode   = DXGI_ALPHA_MODE_PREMULTIPLIED;
+    desc.BufferUsage      = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    desc.BufferCount      = 2;
+    desc.SwapEffect       = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+    // CreateSwapChainForHwnd does not support per-pixel alpha on the swap
+    // chain itself — only DComp swap chains do. We get the visible
+    // transparency effect from the acrylic backdrop applied at the window
+    // level, plus our own tint drawn opaquely on top.
+    desc.AlphaMode        = DXGI_ALPHA_MODE_UNSPECIFIED;
 
-    // Acrylic underneath us already provides the blur. We use FLIP_SEQUENTIAL
-    // with premultiplied alpha so transparent pixels we draw show through.
     ThrowIfFailed(dxgiFactory->CreateSwapChainForHwnd(
                       d3d_device_.Get(), hwnd, &desc, nullptr, nullptr,
                       swap_chain_.GetAddressOf()),
@@ -165,8 +165,10 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
     d2d_dc_->BeginDraw();
     d2d_dc_->SetTransform(D2D1::Matrix3x2F::Identity());
 
-    // Fully transparent canvas: the window itself is layered atop acrylic.
-    d2d_dc_->Clear(D2D1::ColorF(0, 0, 0, 0));
+    // Opaque dark base. Acrylic blur is handled by the OS at the window
+    // level; the tint we paint here sits on top of it through the squircle
+    // window region.
+    d2d_dc_->Clear(ToD2D(pal.contentBackground));
 
     // Push squircle clip via a layer geometry, so everything we draw next
     // (tint, content, traffic lights) is automatically rounded.
