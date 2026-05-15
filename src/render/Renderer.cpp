@@ -1,5 +1,6 @@
 #include "render/Renderer.h"
 
+#include "theme/RuntimeTweaks.h"
 #include "theme/TahoeTheme.h"
 #include "window/SquircleGeometry.h"
 
@@ -175,7 +176,7 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
     if (!d2d_dc_ || !swap_chain_) return;
 
     const auto&  pal     = theme::ActivePalette();
-    const float  radius  = theme::ToPx(theme::kRadiusTitlebarWindow, dpi_);
+    const float  radius  = theme::ToPx(theme::tweaks::gCornerRadius, dpi_);
     const float  width   = static_cast<float>(width_px_);
     const float  height  = static_cast<float>(height_px_);
 
@@ -227,8 +228,11 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
         if (fmt) {
             fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
             fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-            const wchar_t* placeholder =
-                L"Terminal coming soon \u2014 squircle radius 16pt";
+            wchar_t placeholder[128];
+            std::swprintf(
+                placeholder, ARRAYSIZE(placeholder),
+                L"radius %.0f pt    [ / ] to adjust    Shift+[ / Shift+]  \u00B14",
+                static_cast<double>(theme::tweaks::gCornerRadius));
             brush_->SetColor(ToD2D(pal.textMuted));
             d2d_dc_->DrawText(placeholder,
                               static_cast<UINT32>(wcslen(placeholder)),
