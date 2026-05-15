@@ -1,21 +1,30 @@
-// Direct2D / Direct3D11 / DirectComposition renderer.
+// DirectComposition-based renderer.
+//
+// We render via DirectComposition rather than a plain HWND swap chain. The
+// crucial advantage is that DComp swap chains do not require a redirection
+// surface, so we create the window with WS_EX_NOREDIRECTIONBITMAP and DWM
+// has *no* place to paint its own frame, caption strip, or border. Whatever
+// pixels we put in the DComp visual *is* the window. Transparency is
+// per-pixel, anti-aliasing is handled by the compositor, and the squircle
+// outline materialises automatically from the alpha channel.
 //
 // Pipeline:
-//   D3D11Device + DXGI swap chain (FLIP, premultiplied alpha)
-//                |
-//                v
-//     D2D1Device built from the DXGI device
-//                |
-//                v
-//     D2D1DeviceContext with target = swap chain back buffer
-//                |
-//                v
-//     Each frame: Begin -> draw squircle clipped fill -> traffic lights ->
-//     content stub -> End -> Present.
 //
-// This class is intentionally NOT a render thread. Drawing happens on the UI
-// thread, kicked off by WM_PAINT or by an explicit RequestPaint() call from
-// the window after a state change.
+//     D3D11Device
+//          |
+//          v
+//     IDXGISwapChain (CreateSwapChainForComposition, premul alpha)
+//          |
+//          +--- D2D bitmap target -> rendered each frame by Renderer::Render
+//          |
+//          v
+//     IDCompositionVisual.SetContent(swapchain)
+//          |
+//          v
+//     IDCompositionTarget for the HWND
+//          |
+//          v
+//     IDCompositionDevice.Commit()  -> compositor displays the swap chain.
 
 #pragma once
 
@@ -28,13 +37,13 @@ class Renderer {
 public:
     void Initialize(HWND hwnd);
 
-    // Resize swap chain after WM_SIZE. Width/height are physical pixels.
+    // Resize the swap chain after WM_SIZE. Width/height are physical pixels.
     void Resize(UINT widthPx, UINT heightPx);
 
     // Update DPI scale; call before Render() after WM_DPICHANGED.
     void SetDpi(UINT dpi) { dpi_ = dpi; }
 
-    // Paint one frame. Caller has already updated logical state.
+    // Paint one frame.
     void Render(bool windowActive, ui::TrafficLights& trafficLights);
 
     UINT          Dpi()        const { return dpi_; }
@@ -52,20 +61,27 @@ private:
     UINT width_px_  {0};
     UINT height_px_ {0};
 
-    // D3D / DXGI
+    // D3D
     ComPtr<ID3D11Device>        d3d_device_;
     ComPtr<ID3D11DeviceContext> d3d_context_;
+
+    // DXGI swap chain: created via CreateSwapChainForComposition (no HWND).
     ComPtr<IDXGISwapChain1>     swap_chain_;
 
     // Direct2D
-    ComPtr<ID2D1Factory1>       d2d_factory_;
-    ComPtr<ID2D1Device>         d2d_device_;
-    ComPtr<ID2D1DeviceContext>  d2d_dc_;
-    ComPtr<ID2D1Bitmap1>        d2d_back_buffer_;
+    ComPtr<ID2D1Factory1>        d2d_factory_;
+    ComPtr<ID2D1Device>          d2d_device_;
+    ComPtr<ID2D1DeviceContext>   d2d_dc_;
+    ComPtr<ID2D1Bitmap1>         d2d_back_buffer_;
     ComPtr<ID2D1SolidColorBrush> brush_;
 
-    // DirectWrite (for caption text once we add a title; unused for MVP)
-    ComPtr<IDWriteFactory>      dwrite_factory_;
+    // DirectWrite
+    ComPtr<IDWriteFactory>       dwrite_factory_;
+
+    // DirectComposition
+    ComPtr<IDCompositionDevice>  dcomp_device_;
+    ComPtr<IDCompositionTarget>  dcomp_target_;
+    ComPtr<IDCompositionVisual>  dcomp_visual_;
 };
 
 }  // namespace mactw::render

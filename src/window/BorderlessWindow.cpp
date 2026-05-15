@@ -9,13 +9,7 @@ namespace {
 
 constexpr wchar_t kClassName[] = L"MacTermWin.BorderlessWindow";
 
-// Undocumented messages DWM uses to ask us to paint chunks of the system
-// non-client area. We want none of it; default-handling them re-introduces
-// the grey/blue caption frame even when WM_NCPAINT itself is suppressed.
-constexpr UINT kWmNcUahDrawCaption = 0x00AE;
-constexpr UINT kWmNcUahDrawFrame   = 0x00AF;
-
-// Get the per-monitor DPI; falls back to 96 only on pre-1607 systems.
+// Get per-monitor DPI; falls back to 96 only on pre-1607 systems.
 UINT GetWindowDpiSafe(HWND hwnd) {
     using PFN = UINT(WINAPI*)(HWND);
     static PFN fn = []() -> PFN {
@@ -24,31 +18,6 @@ UINT GetWindowDpiSafe(HWND hwnd) {
                  : nullptr;
     }();
     return fn ? fn(hwnd) : 96u;
-}
-
-// Tell DWM to stop drawing on this window:
-//   * NCRENDERING_POLICY = DISABLED disables every system-drawn frame
-//     element. Available since Windows Vista, behaviour stable on Win11.
-//   * WINDOW_CORNER_PREFERENCE = DONOTROUND defeats the Win11-only
-//     auto-rounding that would otherwise clip our squircle region.
-void NeutraliseDwm(HWND hwnd) {
-    constexpr DWORD DWMWA_NCRENDERING_POLICY_LOCAL          = 2;
-    constexpr DWORD DWMNCRP_DISABLED_LOCAL                  = 1;
-    constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL    = 33;
-    constexpr DWORD DWMWCP_DONOTROUND_LOCAL                 = 1;
-    constexpr DWORD DWMWA_TRANSITIONS_FORCEDISABLED_LOCAL   = 3;
-
-    DWORD policy = DWMNCRP_DISABLED_LOCAL;
-    ::DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY_LOCAL,
-                            &policy, sizeof(policy));
-
-    DWORD cornerPref = DWMWCP_DONOTROUND_LOCAL;
-    ::DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL,
-                            &cornerPref, sizeof(cornerPref));
-
-    BOOL noTransitions = TRUE;
-    ::DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED_LOCAL,
-                            &noTransitions, sizeof(noTransitions));
 }
 
 void Trace(const char* msg) {
@@ -85,7 +54,8 @@ LRESULT CALLBACK BorderlessWindow::StaticWndProc(HWND hwnd, UINT msg,
         auto* cs = reinterpret_cast<CREATESTRUCTW*>(lp);
         self = static_cast<BorderlessWindow*>(cs->lpCreateParams);
         self->hwnd_ = hwnd;
-        ::SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
+        ::SetWindowLongPtrW(hwnd, GWLP_USERDATA,
+                            reinterpret_cast<LONG_PTR>(self));
     } else {
         self = reinterpret_cast<BorderlessWindow*>(
             ::GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -108,7 +78,7 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     wc.lpfnWndProc   = &BorderlessWindow::StaticWndProc;
     wc.hInstance     = hInstance;
     wc.hCursor       = ::LoadCursorW(nullptr, IDC_ARROW);
-    wc.hbrBackground = nullptr;  // we paint everything
+    wc.hbrBackground = nullptr;
     wc.lpszClassName = kClassName;
     ::RegisterClassExW(&wc);
     Trace("class registered");
@@ -118,13 +88,18 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     const int wPx = theme::ToPxInt(theme::kDefaultWindowWidth,  dpi_);
     const int hPx = theme::ToPxInt(theme::kDefaultWindowHeight, dpi_);
 
-    // Pure popup. No WS_THICKFRAME, so DWM has nothing to paint a frame on.
-    // We re-implement resize ourselves: WM_NCHITTEST returns HTLEFT etc.,
-    // and on WM_NCLBUTTONDOWN we trigger SC_SIZE manually instead of relying
-    // on DefWindowProc's frame-driven path.
+    // Plain WS_POPUP. We don't need WS_THICKFRAME because we manage resize
+    // ourselves via WM_NCHITTEST + WM_SYSCOMMAND/SC_SIZE. WS_MINIMIZEBOX and
+    // WS_MAXIMIZEBOX exist solely so the taskbar preview offers those
+    // actions.
     constexpr DWORD style   = WS_POPUP | WS_MINIMIZEBOX | WS_MAXIMIZEBOX |
                               WS_CLIPCHILDREN;
-    constexpr DWORD exStyle = WS_EX_APPWINDOW;
+
+    // The crucial flag: WS_EX_NOREDIRECTIONBITMAP. Without a redirection
+    // surface there is no place for DWM to paint frame chrome. Combined
+    // with DirectComposition rendering, every visible pixel is one we put
+    // in the DComp visual.
+    constexpr DWORD exStyle = WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP;
 
     HWND hwnd = ::CreateWindowExW(
         exStyle, kClassName, title, style,
@@ -138,10 +113,6 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
 
     dpi_ = GetWindowDpiSafe(hwnd);
 
-    // Kill every DWM-side decoration on this HWND.
-    NeutraliseDwm(hwnd);
-    Trace("DWM neutralised");
-
     renderer_.SetDpi(dpi_);
     Trace("calling renderer init");
     renderer_.Initialize(hwnd);
@@ -149,9 +120,6 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
 
     traffic_.UpdateLayout(dpi_);
     Trace("traffic layout done");
-
-    UpdateWindowRegion();
-    Trace("region applied");
 
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
@@ -161,19 +129,6 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
 }
 
 // ---------------------------------------------------------------------------
-
-void BorderlessWindow::UpdateWindowRegion() {
-    if (!hwnd_) return;
-    RECT rc{};
-    ::GetWindowRect(hwnd_, &rc);
-    const int w = rc.right  - rc.left;
-    const int h = rc.bottom - rc.top;
-    if (w <= 0 || h <= 0) return;
-
-    const int radius = theme::ToPxInt(theme::kRadiusTitlebarWindow, dpi_);
-    HRGN rgn = BuildSquircleRegion(w, h, radius, theme::kSquircleSmoothing);
-    ::SetWindowRgn(hwnd_, rgn, /*redraw=*/TRUE);
-}
 
 void BorderlessWindow::OnDpiChanged(UINT newDpi, const RECT* suggested) {
     dpi_ = newDpi;
@@ -185,7 +140,6 @@ void BorderlessWindow::OnDpiChanged(UINT newDpi, const RECT* suggested) {
     }
     renderer_.SetDpi(dpi_);
     traffic_.UpdateLayout(dpi_);
-    UpdateWindowRegion();
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -218,69 +172,33 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
     if (traffic_.HitTest(wx, wy) != ui::TrafficAction::None) {
         return HTCLIENT;
     }
-
     if (wy < captionHpx) {
         return HTCAPTION;
     }
-
     return HTCLIENT;
 }
 
 LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
-        // ---- Frame suppression --------------------------------------------
-        //
-        // NCCALCSIZE returning 0 collapses the entire non-client area into
-        // the client rect.
-        case WM_NCCALCSIZE: {
-            if (wp == TRUE) {
-                if (::IsZoomed(hwnd_)) {
-                    auto* p = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
-                    const int frameX = ::GetSystemMetricsForDpi(SM_CXFRAME, dpi_) +
-                                       ::GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
-                    const int frameY = ::GetSystemMetricsForDpi(SM_CYFRAME, dpi_) +
-                                       ::GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi_);
-                    p->rgrc[0].left   += frameX;
-                    p->rgrc[0].top    += frameY;
-                    p->rgrc[0].right  -= frameX;
-                    p->rgrc[0].bottom -= frameY;
-                }
-                return 0;
-            }
+        // No non-client area at all: the entire window rect is client.
+        case WM_NCCALCSIZE:
+            if (wp == TRUE) return 0;
             break;
-        }
 
-        // Anything that asks us to paint NC is silenced.
-        case WM_NCPAINT:                     return 0;
-        case WM_NCACTIVATE:                  active_ = (wp != FALSE);
-                                             ::InvalidateRect(hwnd_, nullptr, FALSE);
-                                             return TRUE;
-        case kWmNcUahDrawCaption:            return 0;
-        case kWmNcUahDrawFrame:              return 0;
-
-        // ---- Hit testing & resize -----------------------------------------
         case WM_NCHITTEST: {
             POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
             return HitTest(pt);
         }
 
-        // We removed WS_THICKFRAME, so DefWindowProc no longer kicks off a
-        // resize loop on its own. Do it ourselves.
+        // Without WS_THICKFRAME we drive the resize/move loops manually.
         case WM_NCLBUTTONDOWN: {
             const WPARAM ht = wp;
             switch (ht) {
-                case HTLEFT: case HTRIGHT: case HTTOP:    case HTTOPLEFT:
+                case HTLEFT: case HTRIGHT: case HTTOP: case HTTOPLEFT:
                 case HTTOPRIGHT: case HTBOTTOM: case HTBOTTOMLEFT:
                 case HTBOTTOMRIGHT: {
-                    static constexpr WPARAM kEdgeMap[] = {
-                        0,           SC_SIZE | 0xF001, SC_SIZE | 0xF002,
-                        SC_SIZE | 0xF003, SC_SIZE | 0xF004, SC_SIZE | 0xF005,
-                        SC_SIZE | 0xF006, SC_SIZE | 0xF007, SC_SIZE | 0xF008,
-                    };
-                    // Map HT* (10..17) -> SC_SIZE direction (1..8).
                     const WPARAM dir = SC_SIZE + (ht - HTLEFT + 1);
                     ::SendMessageW(hwnd_, WM_SYSCOMMAND, dir, lp);
-                    (void)kEdgeMap;  // kept for documentation
                     return 0;
                 }
                 case HTCAPTION:
@@ -292,19 +210,15 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             break;
         }
 
-        // ---- Activation, sizing, painting --------------------------------
-        case WM_ACTIVATE: {
+        case WM_ACTIVATE:
             active_ = (LOWORD(wp) != WA_INACTIVE);
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
-        }
 
-        case WM_SIZE: {
-            UpdateWindowRegion();
+        case WM_SIZE:
             renderer_.Resize(LOWORD(lp), HIWORD(lp));
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
-        }
 
         case WM_DPICHANGED: {
             const UINT newDpi = HIWORD(wp);
@@ -313,30 +227,27 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_MOUSEMOVE: {
-            const int x = GET_X_LPARAM(lp);
-            const int y = GET_Y_LPARAM(lp);
-            traffic_.OnMouseMove(x, y);
+            traffic_.OnMouseMove(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
             TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
             ::TrackMouseEvent(&tme);
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         }
-        case WM_MOUSELEAVE: {
+        case WM_MOUSELEAVE:
             traffic_.OnMouseLeave();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
-        }
 
-        case WM_LBUTTONDOWN: {
+        case WM_LBUTTONDOWN:
             traffic_.OnLButtonDown(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
             ::SetCapture(hwnd_);
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
-        }
 
         case WM_LBUTTONUP: {
             ::ReleaseCapture();
-            const auto fired = traffic_.OnLButtonUp(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+            const auto fired = traffic_.OnLButtonUp(GET_X_LPARAM(lp),
+                                                    GET_Y_LPARAM(lp));
             switch (fired) {
                 case ui::TrafficAction::Close:
                     ::PostMessageW(hwnd_, WM_CLOSE, 0, 0);
@@ -363,11 +274,10 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
 
-        case WM_PAINT: {
+        case WM_PAINT:
             renderer_.Render(active_, traffic_);
             ::ValidateRect(hwnd_, nullptr);
             return 0;
-        }
 
         case WM_ERASEBKGND:
             return 1;
