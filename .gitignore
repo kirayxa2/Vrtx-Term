@@ -1,0 +1,52 @@
+# Build output
+build/
+out/
+bin/
+obj/
+x64/
+x86/
+Debug/
+Release/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.cmake
+!CMakeLists.txt
+!cmake/*.cmake
+CMakePresets.json.user
+
+# Visual Studio
+.vs/
+*.vcxproj
+*.vcxproj.*
+*.sln
+*.suo
+*.user
+*.aps
+
+# JetBrains
+.idea/
+
+# VS Code
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Compiled binaries
+*.exe
+*.dll
+*.lib
+*.pdb
+*.exp
+*.ilk
+*.obj
+*.tlog
+
+# Profiling/coverage
+*.gcda
+*.gcno

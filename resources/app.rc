@@ -1,0 +1,10 @@
+// MacTermWin Win32 resource script.
+//
+// Embeds the application manifest. Add an icon here once we have one
+// (uncomment the IDI_ICON1 line below and drop a `.ico` next to this file).
+
+#include <winres.h>
+
+1 RT_MANIFEST "app.manifest"
+
+// IDI_ICON1 ICON "icon.ico"
