@@ -85,8 +85,12 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
 
     dpi_ = ::GetDpiForSystem();
 
-    const int wPx = theme::ToPxInt(theme::kDefaultWindowWidth,  dpi_);
-    const int hPx = theme::ToPxInt(theme::kDefaultWindowHeight, dpi_);
+    // The HWND is enlarged on every side by `kShadowMargin` so the soft
+    // drop shadow has somewhere to live. The visible squircle inside is
+    // (default - 2*margin) on each axis.
+    const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+    const int wPx = theme::ToPxInt(theme::kDefaultWindowWidth,  dpi_) + 2 * marginPx;
+    const int hPx = theme::ToPxInt(theme::kDefaultWindowHeight, dpi_) + 2 * marginPx;
 
     // Plain WS_POPUP. We don't need WS_THICKFRAME because we manage resize
     // ourselves via WM_NCHITTEST + WM_SYSCOMMAND/SC_SIZE. WS_MINIMIZEBOX and
@@ -149,13 +153,29 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
     RECT rc{};
     ::GetWindowRect(hwnd_, &rc);
 
-    const int border = theme::ToPxInt(theme::kResizeBorder, dpi_);
+    const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+
+    // The visible squircle is inset by `marginPx` on every side; the band
+    // around it is the soft-shadow zone. Clicks landing in that band must
+    // pass through to whatever is behind the window.
+    const RECT sq{
+        rc.left   + marginPx,
+        rc.top    + marginPx,
+        rc.right  - marginPx,
+        rc.bottom - marginPx,
+    };
+    if (pt.x < sq.left || pt.x >= sq.right ||
+        pt.y < sq.top  || pt.y >= sq.bottom) {
+        return HTTRANSPARENT;
+    }
+
+    const int border     = theme::ToPxInt(theme::kResizeBorder,  dpi_);
     const int captionHpx = theme::ToPxInt(theme::kCaptionHeight, dpi_);
 
-    const bool top    = pt.y < rc.top    + border;
-    const bool bottom = pt.y >= rc.bottom - border;
-    const bool left   = pt.x < rc.left   + border;
-    const bool right  = pt.x >= rc.right  - border;
+    const bool top    = pt.y <  sq.top    + border;
+    const bool bottom = pt.y >= sq.bottom - border;
+    const bool left   = pt.x <  sq.left   + border;
+    const bool right  = pt.x >= sq.right  - border;
 
     if (top    && left)  return HTTOPLEFT;
     if (top    && right) return HTTOPRIGHT;
@@ -166,8 +186,9 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
     if (left)   return HTLEFT;
     if (right)  return HTRIGHT;
 
-    const int wx = pt.x - rc.left;
-    const int wy = pt.y - rc.top;
+    // Squircle-local mouse coordinates for caption / traffic-light hit test.
+    const int wx = pt.x - sq.left;
+    const int wy = pt.y - sq.top;
 
     if (traffic_.HitTest(wx, wy) != ui::TrafficAction::None) {
         return HTCLIENT;
@@ -227,7 +248,9 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_MOUSEMOVE: {
-            traffic_.OnMouseMove(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+            const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+            traffic_.OnMouseMove(GET_X_LPARAM(lp) - marginPx,
+                                 GET_Y_LPARAM(lp) - marginPx);
             TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
             ::TrackMouseEvent(&tme);
             ::InvalidateRect(hwnd_, nullptr, FALSE);
@@ -238,16 +261,20 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
 
-        case WM_LBUTTONDOWN:
-            traffic_.OnLButtonDown(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+        case WM_LBUTTONDOWN: {
+            const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+            traffic_.OnLButtonDown(GET_X_LPARAM(lp) - marginPx,
+                                   GET_Y_LPARAM(lp) - marginPx);
             ::SetCapture(hwnd_);
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
+        }
 
         case WM_LBUTTONUP: {
             ::ReleaseCapture();
-            const auto fired = traffic_.OnLButtonUp(GET_X_LPARAM(lp),
-                                                    GET_Y_LPARAM(lp));
+            const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+            const auto fired = traffic_.OnLButtonUp(GET_X_LPARAM(lp) - marginPx,
+                                                    GET_Y_LPARAM(lp) - marginPx);
             switch (fired) {
                 case ui::TrafficAction::Close:
                     ::PostMessageW(hwnd_, WM_CLOSE, 0, 0);
@@ -269,8 +296,11 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_GETMINMAXINFO: {
             auto* mmi = reinterpret_cast<MINMAXINFO*>(lp);
-            mmi->ptMinTrackSize.x = theme::ToPxInt(360.0f, dpi_);
-            mmi->ptMinTrackSize.y = theme::ToPxInt(220.0f, dpi_);
+            // The visible squircle must stay readable, so pad the minimum
+            // tracking size by 2*margin (the shadow band on either side).
+            const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+            mmi->ptMinTrackSize.x = theme::ToPxInt(360.0f, dpi_) + 2 * marginPx;
+            mmi->ptMinTrackSize.y = theme::ToPxInt(220.0f, dpi_) + 2 * marginPx;
             return 0;
         }
 

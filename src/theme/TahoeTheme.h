@@ -34,14 +34,19 @@ inline constexpr float kWindowCornerRadius = kRadiusTitlebarWindow;
 // published Figma coefficients.
 inline constexpr float kSquircleSmoothing = 0.6f;
 
-// ---- Drop shadow (planned) -------------------------------------------------
-//
-// macOS windows are not flat - the floating glass feel comes from a soft
-// drop shadow cast under the squircle. We will add it in the next iteration
-// as a D2D shadow effect rendered behind the squircle.
-
 // ---- Chrome metrics (logical pt) -------------------------------------------
+
+// Drop shadow under the squircle. The HWND is enlarged by kShadowMargin
+// on every side so the blurred shadow has room; the squircle itself is
+// drawn with offset (margin, margin) inside the HWND.
 //
+// Values mirror the macOS Tahoe reference SVG:
+//     filter: drop-shadow(0 5pt 15pt rgba(0,0,0,0.30))
+inline constexpr float kShadowMargin   = 28.0f;  // >= shadowOffsetY + 2*blur
+inline constexpr float kShadowOffsetY  =  5.0f;
+inline constexpr float kShadowBlurStd  = 15.0f;
+inline constexpr float kShadowAlpha    =  0.30f;
+
 // These five values were dialled in by hand against side-by-side reference
 // screenshots of macOS 26 Tahoe Terminal on the live tweaker (`[`/`]` etc.,
 // since removed). They are the final shipping numbers; do not "round" them
