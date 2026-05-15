@@ -23,7 +23,10 @@ void TrafficLights::UpdateLayout(UINT dpi) {
     const float radius   = diameter * 0.5f;
     const float spacing  = ToPx(kTrafficLightSpacing, dpi);
     const float insetX   = ToPx(kTrafficLightInsetX,  dpi);
-    const float insetY   = ToPx(kTrafficLightInsetY,  dpi);
+    const float captionH = ToPx(kCaptionHeight,       dpi);
+
+    // Vertically centre the disc row inside the caption strip.
+    const float centerY = captionH * 0.5f;
 
     const auto& pal = ActivePalette();
 
@@ -39,9 +42,8 @@ void TrafficLights::UpdateLayout(UINT dpi) {
 
     for (int i = 0; i < 3; ++i) {
         const float cx = insetX + radius + i * (diameter + spacing);
-        const float cy = insetY + radius;
         discs_[i] = Disc{
-            .center = D2D1::Point2F(cx, cy),
+            .center = D2D1::Point2F(cx, centerY),
             .radius = radius,
             .action = actions[i],
             .color  = colors[i],
@@ -50,9 +52,9 @@ void TrafficLights::UpdateLayout(UINT dpi) {
 
     group_bounds_ = D2D1::RectF(
         discs_.front().center.x - radius - 4,
-        discs_.front().center.y - radius - 4,
+        centerY - radius - 4,
         discs_.back().center.x  + radius + 4,
-        discs_.back().center.y  + radius + 4);
+        centerY + radius + 4);
 }
 
 bool TrafficLights::ContainsAnyDisc(int x, int y) const {

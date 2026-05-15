@@ -3,7 +3,7 @@
 
 namespace mactw::theme::tweaks {
 
-float gCornerRadius = kRadiusTitlebarWindow;  // 16 pt
+float gCornerRadius = kWindowCornerRadius;  // 26 pt (Apple toolbar window)
 
 bool HandleKey(WPARAM vk, bool shift) {
     const float step = shift ? 4.0f : 1.0f;

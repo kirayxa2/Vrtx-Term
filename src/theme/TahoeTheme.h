@@ -2,12 +2,13 @@
 //
 // Apple publishes three window classes with three corner radii:
 //
-//   Toolbar window         26pt
+//   Toolbar window         26pt   <- Terminal, Finder, Mail, Safari
 //   Compact toolbar window 20pt
-//   Titlebar window        16pt
+//   Titlebar window        16pt   <- Notes, TextEdit
 //
-// MacTermWin's MVP behaves like the Terminal app, which is a "Titlebar window".
-// When tabs / toolbar land we will switch to 26pt.
+// MacTermWin behaves like a toolbar window: it ships tabs and a toolbar
+// strip, so we use 26pt corners and the wider traffic-light insets that
+// Apple uses on those windows.
 //
 // All sizes are in `pt` == device-independent pixels (logical px @ 100% scale).
 // Use ToPx() to multiply by the per-monitor DPI factor at draw time.
@@ -24,43 +25,33 @@ inline constexpr float kRadiusTitlebarWindow       = 16.0f;
 inline constexpr float kRadiusCompactToolbarWindow = 20.0f;
 inline constexpr float kRadiusToolbarWindow        = 26.0f;
 
-// Squircle smoothing factor in [0, 1].
-//
-//   0.0  : plain circular round-rect (no Apple-style continuity).
-//   0.6  : matches Apple's `.continuous` corner / figma-squircle output —
-//          this is the value Apple ships with their RoundedRectangle in
-//          SwiftUI when you pass `.continuous`.
-//   1.0  : maximum smoothing, corner spread reaches its limit.
-//
-// The math implementing this is in SquircleGeometry.cpp and uses three
-// cubic Bezier segments per corner (shoulder-out, central arc, shoulder-in)
-// to achieve curvature continuity.
+// Currently active class.
+inline constexpr float kWindowCornerRadius = kRadiusToolbarWindow;
+
+// Squircle smoothing factor. Hardcoded at 0.6 (Apple `.continuous` /
+// figma-squircle iOS-7 icon shape) inside SquircleGeometry.cpp via the
+// published Figma coefficients.
 inline constexpr float kSquircleSmoothing = 0.6f;
 
 // ---- Drop shadow (planned) -------------------------------------------------
 //
-// macOS windows are not flat — the floating glass feel comes from a soft
+// macOS windows are not flat - the floating glass feel comes from a soft
 // drop shadow cast under the squircle. We will add it in the next iteration
-// as a D2D shadow effect rendered behind the squircle. Wiring it requires
-// extending the HWND past the visible squircle on every side by a margin
-// big enough to fit the blur, and offsetting all subsequent layout, so it
-// is kept out of this commit until corners are dialled in.
+// as a D2D shadow effect rendered behind the squircle.
 
 // ---- Chrome metrics (logical pt) -------------------------------------------
 
 // Height of the draggable caption strip at the top of the window.
 inline constexpr float kCaptionHeight = 38.0f;
 
-// Resize border thickness for hit-testing. Apple windows are hit-testable a
-// few pt outside their visible squircle; we keep that but stay inside the
-// square bounding box.
+// Resize border thickness for hit-testing.
 inline constexpr float kResizeBorder = 6.0f;
 
-// Traffic-lights: Apple uses 12pt circles, 8pt apart, 13pt from window edge.
-inline constexpr float kTrafficLightDiameter = 12.0f;
+// Traffic-lights on a toolbar window: 14pt circles, 8pt apart, ~20pt from
+// the left edge, vertically centred in the caption strip.
+inline constexpr float kTrafficLightDiameter = 14.0f;
 inline constexpr float kTrafficLightSpacing  = 8.0f;
-inline constexpr float kTrafficLightInsetX   = 13.0f;
-inline constexpr float kTrafficLightInsetY   = 13.0f;
+inline constexpr float kTrafficLightInsetX   = 20.0f;
 
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;

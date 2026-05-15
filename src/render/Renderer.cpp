@@ -202,53 +202,9 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
     d2d_dc_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), squircle.Get()),
                        layer.Get());
 
-    // Caption hairline.
-    const float captionHpx = theme::ToPx(theme::kCaptionHeight, dpi_);
-    {
-        theme::Color sep = pal.windowBorder;
-        sep.a *= 0.6f;
-        brush_->SetColor(ToD2D(sep));
-        d2d_dc_->DrawLine(D2D1::Point2F(0,     captionHpx + 0.5f),
-                          D2D1::Point2F(width, captionHpx + 0.5f),
-                          brush_.Get(), 1.0f);
-    }
-
-    // Placeholder content text.
-    {
-        ComPtr<IDWriteTextFormat> fmt;
-        const wchar_t* fontFamilies[] = {L"Cascadia Code", L"Consolas"};
-        for (const wchar_t* family : fontFamilies) {
-            if (SUCCEEDED(dwrite_factory_->CreateTextFormat(
-                    family, nullptr, DWRITE_FONT_WEIGHT_REGULAR,
-                    DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                    14.0f * dpi_ / 96.0f, L"en-us", fmt.GetAddressOf()))) {
-                break;
-            }
-        }
-        if (fmt) {
-            fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-            wchar_t placeholder[128];
-            std::swprintf(
-                placeholder, ARRAYSIZE(placeholder),
-                L"radius %.0f pt    [ / ] to adjust    Shift+[ / Shift+]  \u00B14",
-                static_cast<double>(theme::tweaks::gCornerRadius));
-            brush_->SetColor(ToD2D(pal.textMuted));
-            d2d_dc_->DrawText(placeholder,
-                              static_cast<UINT32>(wcslen(placeholder)),
-                              fmt.Get(),
-                              D2D1::RectF(0, captionHpx, width, height),
-                              brush_.Get());
-        }
-    }
-
     // Traffic lights.
     trafficLights.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
                          windowActive);
-
-    // Squircle outline hairline.
-    brush_->SetColor(ToD2D(pal.windowBorder));
-    d2d_dc_->DrawGeometry(squircle.Get(), brush_.Get(), 1.0f);
 
     d2d_dc_->PopLayer();
 
