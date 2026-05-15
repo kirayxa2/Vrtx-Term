@@ -141,14 +141,19 @@ void TerminalView::BuildFontFallback() {
     };
 
     for (const auto& m : mappings) {
-        // IDWriteFontFallbackBuilder::AddMappings takes a parallel array
-        // of family-name pointers; build it on the fly.
+        // IDWriteFontFallbackBuilder::AddMappings signature (DWrite_2.h):
+        //   AddMappings(ranges, rangesCount,
+        //               targetFamilyNames, targetFamilyNamesCount,
+        //               fontCollection, localeName, baseFamily, scale)
+        // ...except some Windows 10 SDKs ship a 7-arg version without
+        // baseFamily. We use the 7-arg form (no baseFamily) which works
+        // everywhere; the optional baseFamily argument is rarely useful
+        // and we can scale via per-mapping `scale` if needed later.
         std::vector<const wchar_t*> ptrs(m.families.begin(), m.families.end());
         builder->AddMappings(&m.range, 1,
                              ptrs.data(), static_cast<UINT32>(ptrs.size()),
                              /*fontCollection=*/nullptr,
                              /*localeName=*/nullptr,
-                             /*baseFamily=*/nullptr,
                              /*scale=*/1.0f);
     }
 
