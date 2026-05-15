@@ -1,23 +1,26 @@
-// Borderless top-level window with manual non-client logic.
+// Borderless top-level window driven entirely by DirectComposition.
 //
-// Strategy (well-trodden Win32 path, used by Microsoft Edge, VS Code, Spotify
-// and others):
+// Why this design works where the conventional "extend frame into client
+// area" trick fails:
 //
-//   1. Register a normal class with WS_OVERLAPPEDWINDOW so we still get
-//      proper resize/min/max behaviour from the window manager.
-//   2. Intercept WM_NCCALCSIZE and return 0 with WVR_DEFAULT cleared, which
-//      tells DWM "the entire window is client area" — i.e. no system caption,
-//      no system border.
-//   3. Intercept WM_NCHITTEST so we can:
-//        - report HTCAPTION over the draggable strip,
-//        - report HTLEFT / HTTOP / etc. on the resize border,
-//        - report HTCLIENT for the traffic lights so we receive their clicks.
-//   4. SetWindowRgn to a squircle polygon so acrylic + actual window pixels
-//      are clipped to our shape. Refreshed on every resize and DPI change.
+//   * The HWND is created with WS_EX_NOREDIRECTIONBITMAP. That means DWM
+//     never allocates a redirection surface for it. There is literally no
+//     pixel buffer the system could paint a frame onto.
+//   * The Renderer creates a DirectComposition swap chain via
+//     CreateSwapChainForComposition (no HWND), wraps it in a DComp visual,
+//     and binds that visual to the HWND through IDCompositionTarget. From
+//     this point on, the only pixels that show up where the window lives
+//     are pixels we draw into the swap chain. DWM has no opinion to express.
+//   * Squircle outline materialises automatically from alpha. We don't need
+//     SetWindowRgn, which (a) clips to integer pixel polygons (visibly
+//     jaggy at small radii) and (b) masks out hit testing as well as
+//     visuals, breaking edge-resize.
 //
-// We deliberately keep this class engine-agnostic: it owns the HWND, dispatches
-// events to a Renderer + TrafficLights pair, but knows nothing about how those
-// are implemented.
+// Resize and move are driven manually because WS_THICKFRAME is gone. We
+// classify the cursor location in WM_NCHITTEST and on WM_NCLBUTTONDOWN we
+// kick off a system SC_SIZE / SC_MOVE which gives us all the standard
+// modifier behaviour (Aero Snap, Win+arrow tiling, etc.) without DWM ever
+// drawing a frame.
 
 #pragma once
 
@@ -35,29 +38,20 @@ public:
     BorderlessWindow(const BorderlessWindow&)            = delete;
     BorderlessWindow& operator=(const BorderlessWindow&) = delete;
 
-    // Create the HWND and show it. Returns the HWND on success, throws on
-    // failure.
     HWND Create(HINSTANCE hInstance, const wchar_t* title);
-
     HWND Hwnd() const { return hwnd_; }
 
 private:
     static LRESULT CALLBACK StaticWndProc(HWND, UINT, WPARAM, LPARAM);
     LRESULT WndProc(UINT msg, WPARAM wp, LPARAM lp);
 
-    // Recompute squircle window region after size or DPI change.
-    void UpdateWindowRegion();
-
-    // WM_NCHITTEST helper: classify a screen-space point.
     LRESULT HitTest(POINT screenPt) const;
-
-    // Apply the per-monitor DPI to renderer + traffic-lights.
     void OnDpiChanged(UINT newDpi, const RECT* suggested);
 
-    HWND       hwnd_   {nullptr};
-    HINSTANCE  hinst_  {nullptr};
-    UINT       dpi_    {96};
-    bool       active_ {true};
+    HWND      hwnd_   {nullptr};
+    HINSTANCE hinst_  {nullptr};
+    UINT      dpi_    {96};
+    bool      active_ {true};
 
     render::Renderer  renderer_;
     ui::TrafficLights traffic_;
