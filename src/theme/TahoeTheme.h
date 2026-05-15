@@ -2,13 +2,14 @@
 //
 // Apple publishes three window classes with three corner radii:
 //
-//   Toolbar window         26pt   <- Terminal, Finder, Mail, Safari
+//   Toolbar window         26pt   <- has a real toolbar (Finder, Mail, Safari)
 //   Compact toolbar window 20pt
-//   Titlebar window        16pt   <- Notes, TextEdit
+//   Titlebar window        16pt   <- thin title strip; Terminal, Notes, TextEdit
 //
-// MacTermWin behaves like a toolbar window: it ships tabs and a toolbar
-// strip, so we use 26pt corners and the wider traffic-light insets that
-// Apple uses on those windows.
+// MacTermWin's MVP behaves like a "Titlebar window": we ship traffic
+// lights in a thin caption strip but do not have a separate toolbar yet,
+// so 16pt is the matching radius. When tabs and toolbar land we will
+// revisit.
 //
 // All sizes are in `pt` == device-independent pixels (logical px @ 100% scale).
 // Use ToPx() to multiply by the per-monitor DPI factor at draw time.
@@ -26,7 +27,7 @@ inline constexpr float kRadiusCompactToolbarWindow = 20.0f;
 inline constexpr float kRadiusToolbarWindow        = 26.0f;
 
 // Currently active class.
-inline constexpr float kWindowCornerRadius = kRadiusToolbarWindow;
+inline constexpr float kWindowCornerRadius = kRadiusTitlebarWindow;
 
 // Squircle smoothing factor. Hardcoded at 0.6 (Apple `.continuous` /
 // figma-squircle iOS-7 icon shape) inside SquircleGeometry.cpp via the
@@ -42,16 +43,16 @@ inline constexpr float kSquircleSmoothing = 0.6f;
 // ---- Chrome metrics (logical pt) -------------------------------------------
 
 // Height of the draggable caption strip at the top of the window.
-inline constexpr float kCaptionHeight = 38.0f;
+inline constexpr float kCaptionHeight = 28.0f;
 
 // Resize border thickness for hit-testing.
 inline constexpr float kResizeBorder = 6.0f;
 
-// Traffic-lights on a toolbar window: 14pt circles, 8pt apart, ~20pt from
-// the left edge, vertically centred in the caption strip.
-inline constexpr float kTrafficLightDiameter = 14.0f;
+// Traffic-lights on a titlebar window (Terminal-class): 12pt circles, 8pt
+// apart, ~13pt from the left edge, vertically centred in the caption strip.
+inline constexpr float kTrafficLightDiameter = 12.0f;
 inline constexpr float kTrafficLightSpacing  = 8.0f;
-inline constexpr float kTrafficLightInsetX   = 20.0f;
+inline constexpr float kTrafficLightInsetX   = 13.0f;
 
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
