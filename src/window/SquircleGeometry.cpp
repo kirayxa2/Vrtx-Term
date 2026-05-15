@@ -5,99 +5,80 @@ namespace mactw::window {
 namespace {
 
 // ---------------------------------------------------------------------------
-// Squircle-corner math.
+// Squircle path geometry.
 //
-// Each corner is one cubic Bezier. With four corners and four straight edges
-// the closed shape is eight path commands total, which is exactly what we
-// emit below.
+// One cubic Bezier per corner, plus four straight edges. Eight path commands
+// total. Each corner is written out by hand instead of going through a
+// rotation matrix - it is only twelve numbers per corner and it makes the
+// math obvious to read.
 //
-// Derivation:
+// Math:
 //
-//   * Standard cubic-Bezier approximation of a 90 degree circular arc of
-//     radius r uses control points offset by K*r where
+//   A 90 degree circular arc of radius r is approximated very accurately by
+//   one cubic Bezier whose handles are offset along the tangent by
 //
 //         K = (4/3) * tan(pi/8) = 0.55228...
 //
-//     This is the de-facto constant used throughout vector graphics (Postscript,
-//     SVG renderers, browsers).
+//   This is the standard arc-to-bezier constant used throughout SVG and
+//   PostScript renderers.
 //
-//   * For an Apple-style continuous corner we extend the corner's footprint
-//     along each edge from r to p = (1 + smoothing) * r. The same K is used to
-//     place the handles, but now scaled by p instead of r. At smoothing = 0
-//     we recover the exact circular round-rect; as smoothing grows the corner
-//     stretches outward along the edges, which is the visual signature of a
-//     squircle.
+//   For an Apple-style continuous corner we extend the corner footprint
+//   from r along each edge to p = (1 + smoothing) * r. The same K is reused
+//   to place the handles, but scaled by p instead of r. At smoothing == 0
+//   we recover the exact circular round-rect; as smoothing grows the corner
+//   stretches outward along the edges, which is the visual signature of an
+//   Apple `.continuous` corner.
 //
-// This is not G2-continuous in the strict mathematical sense — figma-squircle's
-// three-Bezier-per-corner scheme is. However at the radii Apple uses (16, 20,
-// 26 pt) the visual difference is sub-pixel on standard displays, and this
-// formulation has the practical advantages of being short, fully analytic, and
-// trivial to sample for the window region.
+//   Straight edges remain straight. Each edge is a single LineTo.
 // ---------------------------------------------------------------------------
 
 constexpr float kArcK = 0.55228474983079339f;  // 4/3 * tan(pi/8)
 
-struct CornerXform {
-    int   rotationSteps;     // CCW 90-degree steps applied before translation
-    float tx, ty;
+struct CornerPoints {
+    D2D1_POINT_2F start;
+    D2D1_POINT_2F c1;
+    D2D1_POINT_2F c2;
+    D2D1_POINT_2F end;
 };
 
-// Rotate point p by `steps` * 90deg CCW around origin.
-inline D2D1_POINT_2F Rotate90Steps(D2D1_POINT_2F p, int steps) {
-    float x = p.x, y = p.y;
-    for (int i = 0; i < steps; ++i) {
-        const float nx = -y;
-        const float ny =  x;
-        x = nx;
-        y = ny;
-    }
-    return D2D1::Point2F(x, y);
-}
-
-inline D2D1_POINT_2F Apply(const CornerXform& xf, D2D1_POINT_2F p) {
-    auto r = Rotate90Steps(p, xf.rotationSteps);
-    return D2D1::Point2F(r.x + xf.tx, r.y + xf.ty);
-}
-
-// In the canonical (unrotated) frame the corner tip sits at (0, 0), the
-// "incoming" edge runs along -X (from p_minus_x to 0), and the "outgoing"
-// edge runs along +Y. We emit one cubic from start to end of the corner.
-struct CornerCubic {
-    D2D1_POINT_2F start, c1, c2, end;
+struct AllCorners {
+    CornerPoints tr, br, bl, tl;
 };
 
-CornerCubic ComputeCornerCubic(float radius, float smoothing) {
+// Build the four corner cubics for a width x height rectangle, traversing
+// the path clockwise starting at the top-right corner.
+AllCorners ComputeCorners(float w, float h, float radius, float smoothing) {
     smoothing = std::clamp(smoothing, 0.0f, 1.0f);
     const float p = (1.0f + smoothing) * radius;
+    const float k = kArcK * p;  // bezier handle length
 
-    // Handle inset is K*p from the start/end along the perpendicular axis.
-    const float h = kArcK * p;
+    AllCorners c{};
 
-    return CornerCubic{
-        .start = D2D1::Point2F(-p,    0.0f),
-        .c1    = D2D1::Point2F(-p + h, 0.0f),
-        .c2    = D2D1::Point2F( 0.0f, p - h),
-        .end   = D2D1::Point2F( 0.0f, p),
-    };
-}
+    // Top-right corner: leaving the top edge, curving down to the right edge.
+    c.tr.start = D2D1::Point2F(w - p,      0.0f);
+    c.tr.c1    = D2D1::Point2F(w - p + k,  0.0f);
+    c.tr.c2    = D2D1::Point2F(w,          p - k);
+    c.tr.end   = D2D1::Point2F(w,          p);
 
-// Per-corner transforms applied to the canonical frame so that:
-//   index 0 -> top-right     corner at (W, 0)
-//   index 1 -> bottom-right  corner at (W, H)
-//   index 2 -> bottom-left   corner at (0, H)
-//   index 3 -> top-left      corner at (0, 0)
-//
-// Rotation steps are chosen so that the corner's "incoming edge" (along -X
-// in the local frame) maps to the actual incoming edge in the window frame,
-// and "outgoing edge" (+Y in local) to the actual outgoing edge — preserving
-// the clockwise traversal of the path as a whole.
-std::array<CornerXform, 4> CornerTransforms(float w, float h) {
-    return {{
-        {0, w, 0.f},
-        {3, w, h},
-        {2, 0.f, h},
-        {1, 0.f, 0.f},
-    }};
+    // Bottom-right corner: leaving the right edge, curving left along bottom.
+    c.br.start = D2D1::Point2F(w,          h - p);
+    c.br.c1    = D2D1::Point2F(w,          h - p + k);
+    c.br.c2    = D2D1::Point2F(w - p + k,  h);
+    c.br.end   = D2D1::Point2F(w - p,      h);
+
+    // Bottom-left corner: leaving the bottom edge, curving up to the left.
+    c.bl.start = D2D1::Point2F(p,      h);
+    c.bl.c1    = D2D1::Point2F(p - k,  h);
+    c.bl.c2    = D2D1::Point2F(0.0f,   h - p + k);
+    c.bl.end   = D2D1::Point2F(0.0f,   h - p);
+
+    // Top-left corner: leaving the left edge, curving right to the top.
+    c.tl.start = D2D1::Point2F(0.0f,    p);
+    c.tl.c1    = D2D1::Point2F(0.0f,    p - k);
+    c.tl.c2    = D2D1::Point2F(p - k,   0.0f);
+    c.tl.end   = D2D1::Point2F(p,       0.0f);
+
+    return c;
 }
 
 }  // namespace
@@ -111,27 +92,29 @@ ComPtr<ID2D1PathGeometry> BuildSquirclePath(ID2D1Factory* factory,
                                             float smoothing) {
     radius = std::clamp(radius, 0.0f, std::min(width, height) * 0.5f);
 
-    const auto cubic   = ComputeCornerCubic(radius, smoothing);
-    const auto xforms  = CornerTransforms(width, height);
+    const auto c = ComputeCorners(width, height, radius, smoothing);
 
     ComPtr<ID2D1PathGeometry> geom;
     ThrowIfFailed(factory->CreatePathGeometry(geom.GetAddressOf()),
                   "ID2D1Factory::CreatePathGeometry");
 
     ComPtr<ID2D1GeometrySink> sink;
-    ThrowIfFailed(geom->Open(sink.GetAddressOf()), "ID2D1PathGeometry::Open");
+    ThrowIfFailed(geom->Open(sink.GetAddressOf()),
+                  "ID2D1PathGeometry::Open");
 
     sink->SetFillMode(D2D1_FILL_MODE_WINDING);
-    sink->BeginFigure(Apply(xforms[0], cubic.start), D2D1_FIGURE_BEGIN_FILLED);
+    sink->BeginFigure(c.tr.start, D2D1_FIGURE_BEGIN_FILLED);
 
-    for (int i = 0; i < 4; ++i) {
-        const auto& xf = xforms[i];
-        sink->AddBezier(D2D1::BezierSegment(
-            Apply(xf, cubic.c1), Apply(xf, cubic.c2), Apply(xf, cubic.end)));
-
-        const int next = (i + 1) % 4;
-        sink->AddLine(Apply(xforms[next], cubic.start));
-    }
+    // Top-right corner -> right edge -> bottom-right corner -> bottom edge ->
+    // bottom-left corner -> left edge -> top-left corner -> top edge -> close.
+    sink->AddBezier(D2D1::BezierSegment(c.tr.c1, c.tr.c2, c.tr.end));
+    sink->AddLine(c.br.start);
+    sink->AddBezier(D2D1::BezierSegment(c.br.c1, c.br.c2, c.br.end));
+    sink->AddLine(c.bl.start);
+    sink->AddBezier(D2D1::BezierSegment(c.bl.c1, c.bl.c2, c.bl.end));
+    sink->AddLine(c.tl.start);
+    sink->AddBezier(D2D1::BezierSegment(c.tl.c1, c.tl.c2, c.tl.end));
+    // implicit close-line back to c.tr.start
 
     sink->EndFigure(D2D1_FIGURE_END_CLOSED);
     ThrowIfFailed(sink->Close(), "ID2D1GeometrySink::Close");
@@ -146,15 +129,15 @@ HRGN BuildSquircleRegion(int width,
                          int radius,
                          float smoothing,
                          int samplesPerCorner) {
-    radius    = std::clamp(radius, 0, std::min(width, height) / 2);
-    smoothing = std::clamp(smoothing, 0.0f, 1.0f);
+    radius = std::clamp(radius, 0, std::min(width, height) / 2);
+    if (samplesPerCorner < 4) samplesPerCorner = 4;
 
-    const auto cubic  = ComputeCornerCubic(static_cast<float>(radius), smoothing);
-    const auto xforms = CornerTransforms(static_cast<float>(width),
-                                         static_cast<float>(height));
+    const auto c = ComputeCorners(static_cast<float>(width),
+                                  static_cast<float>(height),
+                                  static_cast<float>(radius), smoothing);
 
-    auto evalBezier = [](D2D1_POINT_2F p0, D2D1_POINT_2F p1, D2D1_POINT_2F p2,
-                         D2D1_POINT_2F p3, float t) {
+    auto evalCubic = [](D2D1_POINT_2F p0, D2D1_POINT_2F p1,
+                        D2D1_POINT_2F p2, D2D1_POINT_2F p3, float t) {
         const float u = 1.0f - t;
         const float b0 = u * u * u;
         const float b1 = 3 * u * u * t;
@@ -175,21 +158,19 @@ HRGN BuildSquircleRegion(int width,
         }
     };
 
-    for (int i = 0; i < 4; ++i) {
-        const auto& xf = xforms[i];
-
-        const auto p0 = Apply(xf, cubic.start);
-        const auto p1 = Apply(xf, cubic.c1);
-        const auto p2 = Apply(xf, cubic.c2);
-        const auto p3 = Apply(xf, cubic.end);
-
-        pushPt(p0);
+    auto sampleCorner = [&](const CornerPoints& corner) {
+        pushPt(corner.start);
         for (int s = 1; s < samplesPerCorner; ++s) {
             const float t = static_cast<float>(s) / samplesPerCorner;
-            pushPt(evalBezier(p0, p1, p2, p3, t));
+            pushPt(evalCubic(corner.start, corner.c1, corner.c2, corner.end, t));
         }
-        pushPt(p3);
-    }
+        pushPt(corner.end);
+    };
+
+    sampleCorner(c.tr);
+    sampleCorner(c.br);
+    sampleCorner(c.bl);
+    sampleCorner(c.tl);
 
     return ::CreatePolygonRgn(pts.data(),
                               static_cast<int>(pts.size()),

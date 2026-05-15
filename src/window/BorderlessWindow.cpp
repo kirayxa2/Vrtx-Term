@@ -20,6 +20,21 @@ UINT GetWindowDpiSafe(HWND hwnd) {
     }();
     return fn ? fn(hwnd) : 96u;
 }
+
+// Disable the Windows 11 DWM corner rounding policy on this HWND. Windows 11
+// rounds top-level windows with its own ~8pt radius unless we explicitly
+// request DWMWCP_DONOTROUND. Without this override our 16pt squircle would
+// be visually clipped/double-rounded against the system's own rounding.
+//
+// DWMWA_WINDOW_CORNER_PREFERENCE = 33 was added in Windows 11; the call
+// silently no-ops on Windows 10, which is exactly what we want.
+void DisableDwmCornerRounding(HWND hwnd) {
+    constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL = 33;
+    constexpr DWORD DWMWCP_DONOTROUND_LOCAL              = 1;
+    DWORD pref = DWMWCP_DONOTROUND_LOCAL;
+    ::DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL,
+                            &pref, sizeof(pref));
+}
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -87,7 +102,12 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     const int wPx = theme::ToPxInt(theme::kDefaultWindowWidth,  dpi_);
     const int hPx = theme::ToPxInt(theme::kDefaultWindowHeight, dpi_);
 
-    constexpr DWORD style   = WS_OVERLAPPEDWINDOW;
+    // Pure popup window: no caption, no system menu, no border that DWM
+    // could draw. We keep WS_THICKFRAME so resize works and Aero Snap stays
+    // available, and WS_MINIMIZEBOX/WS_MAXIMIZEBOX so the taskbar preview
+    // shows the right thumbnail actions.
+    constexpr DWORD style = WS_POPUP | WS_THICKFRAME |
+                            WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_CLIPCHILDREN;
     constexpr DWORD exStyle = 0;
 
     HWND hwnd = ::CreateWindowExW(
@@ -102,9 +122,10 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
 
     dpi_ = GetWindowDpiSafe(hwnd);
 
-    MARGINS m{0, 0, 1, 0};
-    ::DwmExtendFrameIntoClientArea(hwnd, &m);
-    trace("DWM extended");
+    // Tell DWM not to round our window with its built-in policy on Windows 11.
+    // Our squircle region is the only rounding we want.
+    DisableDwmCornerRounding(hwnd);
+    trace("DWM corner rounding disabled");
 
     ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
                    SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
