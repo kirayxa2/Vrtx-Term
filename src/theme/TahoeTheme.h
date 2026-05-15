@@ -54,6 +54,11 @@ inline constexpr float kCaptionHeight = 31.0f;
 // Resize border thickness for hit-testing.
 inline constexpr float kResizeBorder = 6.0f;
 
+// 1pt hairline outline drawn around the squircle, mirrors the thin light
+// rim macOS puts on every window. The colour comes from
+// `Palette.windowBorder` (a low-alpha white in the dark theme).
+inline constexpr float kWindowBorderWidth = 1.0f;
+
 // Traffic-lights:
 //     diameter        13 pt
 //     edge-to-edge     10 pt   (gap between adjacent discs)

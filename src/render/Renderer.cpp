@@ -207,6 +207,30 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
 
     d2d_dc_->PopLayer();
 
+    // ---- Hairline outline ------------------------------------------------
+    //
+    // 1pt light rim around the squircle, drawn AFTER PopLayer so it is not
+    // clipped by the squircle layer itself. We inset the geometry by half a
+    // pixel so the stroke - which D2D centres on the path - is fully inside
+    // the visible window pixels rather than half-cut by the alpha edge.
+    {
+        const float strokePx = std::max(1.0f,
+                                        theme::ToPx(theme::kWindowBorderWidth, dpi_));
+        const float inset = strokePx * 0.5f;
+
+        auto outline = window::BuildSquirclePath(
+            d2d_factory_.Get(),
+            width  - 2.0f * inset,
+            height - 2.0f * inset,
+            std::max(0.0f, radius - inset),
+            theme::kSquircleSmoothing);
+
+        d2d_dc_->SetTransform(D2D1::Matrix3x2F::Translation(inset, inset));
+        brush_->SetColor(ToD2D(pal.windowBorder));
+        d2d_dc_->DrawGeometry(outline.Get(), brush_.Get(), strokePx);
+        d2d_dc_->SetTransform(D2D1::Matrix3x2F::Identity());
+    }
+
     HRESULT hr = d2d_dc_->EndDraw();
     if (hr == D2DERR_RECREATE_TARGET) {
         d2d_dc_->SetTarget(nullptr);
