@@ -35,13 +35,132 @@ bool ColorsEqual(D2D1_COLOR_F a, D2D1_COLOR_F b) {
 
 void TerminalView::Initialize(IDWriteFactory* dwrite, UINT dpi) {
     dwrite_ = dwrite;
+    // IDWriteFactory2 (Win 8.1+) is needed for IDWriteFontFallbackBuilder.
+    // Every Win10 box has it, so this should never fail in practice.
+    dwrite_.As(&dwrite2_);
     dpi_    = dpi;
+    BuildFontFallback();
     RebuildFormats();
 }
 
 void TerminalView::OnDpiChanged(UINT dpi) {
     dpi_ = dpi;
     RebuildFormats();
+}
+
+// ---- Font fallback -------------------------------------------------------
+//
+// PowerShell prompts (oh-my-posh, Powerlevel10k, Starship) and `ls --icons`
+// rely heavily on Nerd Font glyphs - icons that live in Unicode Private Use
+// Areas (U+E000..U+F8FF and U+F0000..U+FFFFD). The default DirectWrite
+// fallback chain is "system fonts only" which doesn't include any Nerd
+// Font, so those codepoints render as the missing-glyph box.
+//
+// We override the fallback with a small ranked list:
+//
+//   1. The user's primary font (Cascadia Code) - already covers ASCII +
+//      most BMP punctuation + some symbols.
+//   2. "Cascadia Code NF" / "CaskaydiaCove Nerd Font" - if the user has
+//      installed any Cascadia Nerd Font variant. Same metrics as the base
+//      face, so the icons line up perfectly with the grid.
+//   3. "Symbols Nerd Font Mono" / "JetBrainsMono NF" / "FiraCode NF" /
+//      "Hack NF" - other common Nerd Fonts; we list the most popular ones.
+//   4. "Segoe UI Emoji" - colour emoji (U+1F300..U+1FAFF, etc.).
+//   5. "Segoe UI Symbol" / "Segoe MDL2 Assets" - Microsoft's own symbol
+//      sets, partial coverage of various dingbats and box-drawing.
+//   6. The default system fallback as the absolute last resort.
+//
+// If a font in the list is not installed, AddMappings silently maps the
+// range to nothing for that font and DirectWrite moves on to the next
+// candidate.
+
+void TerminalView::BuildFontFallback() {
+    fallback_.Reset();
+    if (!dwrite2_) return;
+
+    ComPtr<IDWriteFontFallbackBuilder> builder;
+    if (FAILED(dwrite2_->CreateFontFallbackBuilder(builder.GetAddressOf()))) {
+        return;
+    }
+
+    // (range, font-family-list) pairs. AddMappings checks each family in
+    // the order given; the first one that exists on the system wins.
+    struct Mapping {
+        DWRITE_UNICODE_RANGE        range;
+        std::vector<const wchar_t*> families;
+    };
+
+    // Nerd Font icon ranges. Sources: https://www.nerdfonts.com/cheat-sheet
+    //
+    //   E000..E0FF  Powerline / Powerline Extra
+    //   E0A0..E0D7  Powerline glyphs proper
+    //   E200..E2A9  Font Awesome Extension
+    //   E300..E3D2  Weather Icons
+    //   E5FA..E62F  Seti UI / custom file icons
+    //   E700..E7C5  Devicons
+    //   F000..F2E0  Font Awesome
+    //   F300..F385  Font Logos
+    //   F400..F532  Octicons
+    //   F500..F8FF  Material Design Icons (subset)
+    //
+    // Easier: just cover the entire PUA in one mapping. Anything in there
+    // that the Nerd Font *doesn't* cover, the chain falls through to
+    // Segoe UI Symbol / system fallback.
+    const std::vector<const wchar_t*> kNerdFonts = {
+        L"CaskaydiaCove Nerd Font Mono",
+        L"CaskaydiaCove Nerd Font",
+        L"Cascadia Code NF",
+        L"Cascadia Mono NF",
+        L"JetBrainsMono Nerd Font Mono",
+        L"JetBrainsMono Nerd Font",
+        L"JetBrainsMono NF",
+        L"FiraCode Nerd Font Mono",
+        L"FiraCode NF",
+        L"Hack Nerd Font Mono",
+        L"Hack NF",
+        L"Symbols Nerd Font Mono",
+        L"Symbols Nerd Font",
+        // Microsoft fallbacks (always installed on Win10+):
+        L"Segoe UI Symbol",
+        L"Segoe MDL2 Assets",
+        L"Segoe Fluent Icons",
+    };
+
+    const Mapping mappings[] = {
+        // Primary BMP PUA - where most Nerd Font icons live.
+        { {0xE000, 0xF8FF}, kNerdFonts },
+        // Supplementary PUA-A - some Material Design Icons live here.
+        { {0xF0000, 0xFFFFD}, kNerdFonts },
+        // Emoji blocks. Listed separately so colour-emoji fonts win.
+        { {0x1F300, 0x1FAFF}, {L"Segoe UI Emoji", L"Segoe UI Symbol"} },
+        { {0x2600,  0x27BF},  {L"Segoe UI Emoji", L"Segoe UI Symbol"} },
+        // Box-drawing + block elements. Cascadia covers these but if the
+        // user picks a font that doesn't, fall through to a known-good one.
+        { {0x2500,  0x259F},  {L"Cascadia Mono", L"Consolas",
+                                L"DejaVu Sans Mono"} },
+    };
+
+    for (const auto& m : mappings) {
+        // IDWriteFontFallbackBuilder::AddMappings takes a parallel array
+        // of family-name pointers; build it on the fly.
+        std::vector<const wchar_t*> ptrs(m.families.begin(), m.families.end());
+        builder->AddMappings(&m.range, 1,
+                             ptrs.data(), static_cast<UINT32>(ptrs.size()),
+                             /*fontCollection=*/nullptr,
+                             /*localeName=*/nullptr,
+                             /*baseFamily=*/nullptr,
+                             /*scale=*/1.0f);
+    }
+
+    // Append the system default as the very last resort. Without this
+    // step our custom fallback REPLACES the system one, and any glyph
+    // outside the ranges above falls back to nothing.
+    ComPtr<IDWriteFontFallback> systemFallback;
+    if (SUCCEEDED(dwrite2_->GetSystemFontFallback(systemFallback.GetAddressOf()))) {
+        builder->AddMappings(systemFallback.Get());
+    }
+
+    builder->CreateFontFallback(fallback_.GetAddressOf());
 }
 
 // ---- Format / metrics -----------------------------------------------------
@@ -66,6 +185,16 @@ void TerminalView::RebuildFormats() {
         dst->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
         dst->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
         dst->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+
+        // Apply our Nerd Font + emoji fallback chain. Requires
+        // IDWriteTextFormat2 (Win 8.1+); QI silently no-ops on older
+        // platforms, where users will still see boxes for icons.
+        if (fallback_) {
+            ComPtr<IDWriteTextFormat2> tf2;
+            if (SUCCEEDED(dst.As(&tf2)) && tf2) {
+                tf2->SetFontFallback(fallback_.Get());
+            }
+        }
     };
 
     make(DWRITE_FONT_WEIGHT_NORMAL,  DWRITE_FONT_STYLE_NORMAL, fmt_regular_);
@@ -275,10 +404,15 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
                     originX + runEnd * cell_w_px_,
                     y + cell_h_px_,
                 };
+                // CLIP keeps glyphs from spilling into neighbouring cells;
+                // ENABLE_COLOR_FONT lets COLR/SVG fonts (Segoe UI Emoji,
+                // and Nerd Fonts that ship a coloured Material Design set)
+                // render in colour instead of being flattened to fg.
                 dc->DrawTextW(runText.c_str(),
                               static_cast<UINT32>(runText.size()),
                               fmt, layoutRect, fillBrush.Get(),
-                              D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                              D2D1_DRAW_TEXT_OPTIONS_CLIP |
+                              D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
             }
 
             c = runEnd;
@@ -322,7 +456,8 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
                     cellU.attrs &
                     (terminal::attr::kBold | terminal::attr::kItalic));
                 dc->DrawTextW(buf2, len, fmt, r2, fillBrush.Get(),
-                              D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                              D2D1_DRAW_TEXT_OPTIONS_CLIP |
+                              D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
             }
         } else {
             dc->DrawRectangle(r2, fillBrush.Get(), 1.0f);

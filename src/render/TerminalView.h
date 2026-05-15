@@ -60,7 +60,11 @@ private:
     void RebuildFormats();
     IDWriteTextFormat* FormatFor(uint16_t attrs) const;
 
+    void BuildFontFallback();
+
     ComPtr<IDWriteFactory>    dwrite_;
+    ComPtr<IDWriteFactory2>   dwrite2_;          // for IDWriteFontFallback
+    ComPtr<IDWriteFontFallback> fallback_;        // glyph fallback to Nerd / emoji fonts
     ComPtr<IDWriteTextFormat> fmt_regular_;
     ComPtr<IDWriteTextFormat> fmt_bold_;
     ComPtr<IDWriteTextFormat> fmt_italic_;
