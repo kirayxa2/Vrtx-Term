@@ -24,9 +24,27 @@ inline constexpr float kRadiusTitlebarWindow       = 16.0f;
 inline constexpr float kRadiusCompactToolbarWindow = 20.0f;
 inline constexpr float kRadiusToolbarWindow        = 26.0f;
 
-// Squircle smoothing factor. 0.0 == regular circular arc corner, 0.6 closely
-// matches Apple's `.continuous` / figma-squircle output for radii up to 32pt.
+// Squircle smoothing factor in [0, 1].
+//
+//   0.0  : plain circular round-rect (no Apple-style continuity).
+//   0.6  : matches Apple's `.continuous` corner / figma-squircle output —
+//          this is the value Apple ships with their RoundedRectangle in
+//          SwiftUI when you pass `.continuous`.
+//   1.0  : maximum smoothing, corner spread reaches its limit.
+//
+// The math implementing this is in SquircleGeometry.cpp and uses three
+// cubic Bezier segments per corner (shoulder-out, central arc, shoulder-in)
+// to achieve curvature continuity.
 inline constexpr float kSquircleSmoothing = 0.6f;
+
+// ---- Drop shadow (planned) -------------------------------------------------
+//
+// macOS windows are not flat — the floating glass feel comes from a soft
+// drop shadow cast under the squircle. We will add it in the next iteration
+// as a D2D shadow effect rendered behind the squircle. Wiring it requires
+// extending the HWND past the visible squircle on every side by a margin
+// big enough to fit the blur, and offsetting all subsequent layout, so it
+// is kept out of this commit until corners are dialled in.
 
 // ---- Chrome metrics (logical pt) -------------------------------------------
 
