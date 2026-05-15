@@ -174,24 +174,91 @@ void Renderer::Resize(UINT widthPx, UINT heightPx) {
 void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
     if (!d2d_dc_ || !swap_chain_) return;
 
-    const auto&  pal     = theme::ActivePalette();
-    const float  radius  = theme::ToPx(theme::kWindowCornerRadius, dpi_);
-    const float  width   = static_cast<float>(width_px_);
-    const float  height  = static_cast<float>(height_px_);
+    const auto& pal      = theme::ActivePalette();
+    const float radius   = theme::ToPx(theme::kWindowCornerRadius, dpi_);
+    const float marginPx = theme::ToPx(theme::kShadowMargin,       dpi_);
+    const float width    = static_cast<float>(width_px_);
+    const float height   = static_cast<float>(height_px_);
 
+    // The visible squircle sits inside the HWND inset by `marginPx` on every
+    // side; the outer band is the room reserved for the soft drop shadow.
+    const float swW = std::max(1.0f, width  - 2.0f * marginPx);
+    const float swH = std::max(1.0f, height - 2.0f * marginPx);
+
+    // Squircle path is built at (0, 0); we translate it into place each time
+    // so the same geometry serves the shadow pass, the fill, the clip layer,
+    // and the hairline outline.
     auto squircle = window::BuildSquirclePath(d2d_factory_.Get(),
-                                              width, height,
+                                              swW, swH,
                                               radius, theme::kSquircleSmoothing);
 
     d2d_dc_->BeginDraw();
     d2d_dc_->SetTransform(D2D1::Matrix3x2F::Identity());
 
-    // Fully transparent canvas. The squircle is the only opaque region we
-    // emit; everything outside the path stays at alpha 0 and DComp lets the
-    // wallpaper / underlying windows show through.
+    // Fully transparent canvas. Everything outside the squircle (including
+    // the shadow band) stays at alpha 0 wherever the shadow doesn't reach,
+    // so DComp lets the desktop show through.
     d2d_dc_->Clear(D2D1::ColorF(0, 0, 0, 0));
 
+    // ---- Drop shadow pass -------------------------------------------------
+    //
+    // Mirrors the macOS Tahoe SVG `filter: drop-shadow(0 5pt 15pt rgba(0,0,0,0.30))`:
+    //
+    //   1. Record an opaque-shape command list that fills the squircle with
+    //      pre-multiplied rgba(0,0,0, kShadowAlpha) at offset (margin,
+    //      margin + kShadowOffsetY). Pre-baking the alpha into the brush
+    //      saves us a separate D2D opacity effect after the blur.
+    //   2. Feed the command list into a Gaussian blur with
+    //      stdDeviation = kShadowBlurStd and BORDER_MODE_SOFT so the result
+    //      fades to alpha 0 well inside `kShadowMargin`.
+    //   3. DrawImage onto the back buffer FIRST, before the squircle fill,
+    //      so the opaque squircle covers the inner half of the shadow on
+    //      the overlap and only the soft outer halo remains visible.
+    {
+        ComPtr<ID2D1CommandList> cmdList;
+        ThrowIfFailed(d2d_dc_->CreateCommandList(cmdList.GetAddressOf()),
+                      "ID2D1DeviceContext::CreateCommandList");
+
+        d2d_dc_->SetTarget(cmdList.Get());
+
+        ComPtr<ID2D1SolidColorBrush> shadowBrush;
+        ThrowIfFailed(d2d_dc_->CreateSolidColorBrush(
+                          D2D1::ColorF(0.0f, 0.0f, 0.0f, theme::kShadowAlpha),
+                          shadowBrush.GetAddressOf()),
+                      "CreateSolidColorBrush(shadow)");
+
+        const float shadowOffsetPx = theme::ToPx(theme::kShadowOffsetY, dpi_);
+        d2d_dc_->SetTransform(D2D1::Matrix3x2F::Translation(
+            marginPx, marginPx + shadowOffsetPx));
+        d2d_dc_->FillGeometry(squircle.Get(), shadowBrush.Get());
+        d2d_dc_->SetTransform(D2D1::Matrix3x2F::Identity());
+
+        ThrowIfFailed(cmdList->Close(), "ID2D1CommandList::Close");
+
+        // Switch back to the swap-chain bitmap before consuming the cmdList.
+        d2d_dc_->SetTarget(d2d_back_buffer_.Get());
+        d2d_dc_->SetTransform(D2D1::Matrix3x2F::Identity());
+
+        ComPtr<ID2D1Effect> blur;
+        ThrowIfFailed(d2d_dc_->CreateEffect(CLSID_D2D1GaussianBlur,
+                                            blur.GetAddressOf()),
+                      "CreateEffect(GaussianBlur)");
+        blur->SetInput(0, cmdList.Get());
+        blur->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
+                       theme::ToPx(theme::kShadowBlurStd, dpi_));
+        blur->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE,
+                       D2D1_BORDER_MODE_SOFT);
+
+        d2d_dc_->DrawImage(blur.Get(), nullptr, nullptr,
+                           D2D1_INTERPOLATION_MODE_LINEAR,
+                           D2D1_COMPOSITE_MODE_SOURCE_OVER);
+    }
+
     // ---- Squircle fill ----------------------------------------------------
+    //
+    // From here on every draw is in squircle-local coordinates by virtue of
+    // the active (margin, margin) translation.
+    d2d_dc_->SetTransform(D2D1::Matrix3x2F::Translation(marginPx, marginPx));
     brush_->SetColor(ToD2D(pal.windowTint));
     d2d_dc_->FillGeometry(squircle.Get(), brush_.Get());
 
@@ -201,7 +268,8 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
     d2d_dc_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), squircle.Get()),
                        layer.Get());
 
-    // Traffic lights.
+    // Traffic lights produce squircle-local coordinates already; the active
+    // transform places them inside the window correctly.
     trafficLights.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
                          windowActive);
 
@@ -220,16 +288,18 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
 
         auto outline = window::BuildSquirclePath(
             d2d_factory_.Get(),
-            width  - 2.0f * inset,
-            height - 2.0f * inset,
+            swW - 2.0f * inset,
+            swH - 2.0f * inset,
             std::max(0.0f, radius - inset),
             theme::kSquircleSmoothing);
 
-        d2d_dc_->SetTransform(D2D1::Matrix3x2F::Translation(inset, inset));
+        d2d_dc_->SetTransform(D2D1::Matrix3x2F::Translation(
+            marginPx + inset, marginPx + inset));
         brush_->SetColor(ToD2D(pal.windowBorder));
         d2d_dc_->DrawGeometry(outline.Get(), brush_.Get(), strokePx);
-        d2d_dc_->SetTransform(D2D1::Matrix3x2F::Identity());
     }
+
+    d2d_dc_->SetTransform(D2D1::Matrix3x2F::Identity());
 
     HRESULT hr = d2d_dc_->EndDraw();
     if (hr == D2DERR_RECREATE_TARGET) {
