@@ -95,10 +95,14 @@ struct Palette {
 
 // Apple-flavored dark palette. Values measured visually against macOS Tahoe
 // reference screenshots; tweak in code, not at runtime.
+//
+// All alphas are 1.0 here: the MVP does not use acrylic blur, so the window
+// is fully opaque. When we re-introduce blur later we'll drop the alpha on
+// `windowTint` again so the backdrop shows through.
 inline constexpr Palette kDarkPalette{
-    .windowTint        = Color::FromARGB(0xA01E1E22),
+    .windowTint        = Color::FromARGB(0xFF1C1C1F),
     .windowBorder      = Color::FromARGB(0x33FFFFFF),
-    .contentBackground = Color::FromARGB(0x991C1C1F),
+    .contentBackground = Color::FromARGB(0xFF1C1C1F),
 
     .tlClose    = Color::FromARGB(0xFFFF5F57),
     .tlMinimize = Color::FromARGB(0xFFFEBC2E),
