@@ -1,6 +1,5 @@
 #include "window/BorderlessWindow.h"
 
-#include "theme/RuntimeTweaks.h"
 #include "theme/TahoeTheme.h"
 #include "window/SquircleGeometry.h"
 
@@ -225,17 +224,6 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const UINT newDpi = HIWORD(wp);
             OnDpiChanged(newDpi, reinterpret_cast<const RECT*>(lp));
             return 0;
-        }
-
-        // Dev-only live tweaks. Press [ / ] to nudge the corner radius
-        // while running and watch the squircle update.
-        case WM_KEYDOWN: {
-            const bool shift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
-            if (theme::tweaks::HandleKey(wp, shift)) {
-                ::InvalidateRect(hwnd_, nullptr, FALSE);
-                return 0;
-            }
-            break;
         }
 
         case WM_MOUSEMOVE: {
