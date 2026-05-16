@@ -61,7 +61,10 @@ void SettingsView::UpdateLayout(D2D1_RECT_F squircleRect,
     tile_glyph_px_      = ToPx(kSettingsTileGlyphSize,    dpi);
     tile_text_gap_px_   = ToPx(kSettingsTileTextGap,      dpi);
     row_text_px_        = ToPx(kSettingsRowTextSize,      dpi);
-    sidebar_top_gap_px_ = ToPx(kSettingsSidebarTopGap,    dpi);
+    // Inside the pill, the traffic-lights occupy the top band of
+    // height = caption-strip; the first row starts after that band
+    // plus a small breathing gap.
+    sidebar_top_gap_px_ = captionHeightPx + ToPx(kSettingsRowsTopGap, dpi);
     sidebar_bot_gap_px_ = ToPx(kSettingsSidebarBottomGap, dpi);
     content_pad_x_px_   = ToPx(kSettingsContentPaddingX,  dpi);
     content_pad_top_px_ = ToPx(kSettingsContentPaddingTop,dpi);
@@ -70,33 +73,36 @@ void SettingsView::UpdateLayout(D2D1_RECT_F squircleRect,
     body_text_px_       = ToPx(kSettingsBodyTextSize,     dpi);
     done_text_px_       = ToPx(kSettingsDoneTextSize,     dpi);
 
-    const float padX    = ToPx(kSettingsOuterPaddingX,    dpi);
-    const float padTop  = ToPx(kSettingsOuterPaddingTop,  dpi);
-    const float padBot  = ToPx(kSettingsOuterPaddingBot,  dpi);
-    const float gap     = ToPx(kSettingsSidebarGap,       dpi);
-    const float sbW     = ToPx(kSettingsSidebarWidth,     dpi);
+    const float padL    = ToPx(kSettingsOuterPaddingLeft,  dpi);
+    const float padR    = ToPx(kSettingsOuterPaddingRight, dpi);
+    const float padTop  = ToPx(kSettingsOuterPaddingTop,   dpi);
+    const float padBot  = ToPx(kSettingsOuterPaddingBot,   dpi);
+    const float gap     = ToPx(kSettingsSidebarGap,        dpi);
+    const float sbW     = ToPx(kSettingsSidebarWidth,      dpi);
 
-    // Sidebar pill: floats inside the squircle below the caption strip.
-    // Top edge is BELOW the caption strip + a small breathing gap so the
-    // traffic-lights (which live in the strip) optically anchor onto the
-    // pill's top edge - exactly like Tahoe System Settings.
-    sidebar_.left   = squircleRect.left + padX;
-    sidebar_.top    = squircleRect.top  + captionHeightPx + padTop;
+    // Sidebar pill: the TOP edge of the pill sits a hair below the
+    // squircle top, so the traffic-lights (which live inside the
+    // caption strip at squircle.top..squircle.top+captionHeight) end
+    // up *inside* the pill - they belong to the pill's chrome, just
+    // like in macOS Tahoe System Settings. The pill is therefore much
+    // taller than just the rows region.
+    sidebar_.left   = squircleRect.left  + padL;
+    sidebar_.top    = squircleRect.top   + padTop;
     sidebar_.right  = sidebar_.left + sbW;
     sidebar_.bottom = squircleRect.bottom - padBot;
 
-    // Content area: the rest of the squircle to the right, with a small
-    // inset gutter. We intentionally do NOT fill it: settings controls
-    // (and the title) sit directly on the window surface.
+    // Content area: the rest of the squircle to the right, with a
+    // small inset gutter. We intentionally do NOT fill it: settings
+    // controls (and the title) sit directly on the window surface.
     content_.left   = sidebar_.right + gap;
     content_.top    = squircleRect.top + captionHeightPx;
-    content_.right  = squircleRect.right - padX;
+    content_.right  = squircleRect.right - padR;
     content_.bottom = squircleRect.bottom - padBot;
 
     // Done pill: top-right of the squircle, replacing the chrome
     // chevron-button while the sheet is up. Its vertical centre lines
-    // up with the caption strip's centre so the pill optically belongs
-    // to the title bar rather than to the content.
+    // up with the caption strip's centre so the pill optically
+    // belongs to the title bar rather than to the content.
     const float doneW    = ToPx(kSettingsDoneWidth,  dpi);
     const float doneH    = ToPx(kSettingsDoneHeight, dpi);
     const float doneInsetX = ToPx(kSettingsDoneInsetX, dpi);

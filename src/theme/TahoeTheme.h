@@ -168,11 +168,18 @@ inline constexpr int   kAlertAnimDurationMs = 220;
 //   * Done is a system-blue pill in the top-right of the caption
 //     strip, replacing the chevron-button while the sheet is up.
 
-inline constexpr float kSettingsSidebarWidth      = 210.0f;
-inline constexpr float kSettingsOuterPaddingX     = 16.0f;   // squircle <-> sidebar / content
-inline constexpr float kSettingsOuterPaddingTop   = 10.0f;   // caption-strip bottom -> sidebar top
-inline constexpr float kSettingsOuterPaddingBot   = 16.0f;
-inline constexpr float kSettingsSidebarGap        = 14.0f;   // sidebar <-> content
+// Sidebar pill is a tall floating capsule whose TOP edge sits flush
+// against the squircle top (with a hair gap), so the traffic-lights end
+// up *inside* the pill - they read as part of the sidebar's chrome,
+// exactly like Apple's Tahoe System Settings. The pill therefore has
+// to start at y = squircle.top + kSettingsOuterPaddingTop, not below
+// the caption strip.
+inline constexpr float kSettingsSidebarWidth      = 200.0f;
+inline constexpr float kSettingsOuterPaddingLeft  =  8.0f;   // squircle left -> sidebar left
+inline constexpr float kSettingsOuterPaddingRight = 12.0f;   // squircle right -> content right
+inline constexpr float kSettingsOuterPaddingTop   =  6.0f;   // squircle top -> sidebar top
+inline constexpr float kSettingsOuterPaddingBot   = 12.0f;
+inline constexpr float kSettingsSidebarGap        = 12.0f;   // sidebar pill -> content
 inline constexpr float kSettingsSidebarRadius     = kWindowCornerRadius; // 16pt - matches window
 inline constexpr float kSettingsRowHeight         = 32.0f;
 inline constexpr float kSettingsRowGap            =  2.0f;
@@ -184,7 +191,13 @@ inline constexpr float kSettingsTileRadius        =  5.0f;
 inline constexpr float kSettingsTileGlyphSize     = 13.0f;
 inline constexpr float kSettingsTileTextGap       = 10.0f;
 inline constexpr float kSettingsRowTextSize       = 13.0f;
-inline constexpr float kSettingsSidebarTopGap     = 12.0f;   // sidebar top -> first row
+
+// Inside the pill, the traffic-lights "live" in a reserved band on top.
+// Tabs (sidebar rows) start BELOW that band with a small breathing gap,
+// so the lights and the rows never overlap. The band height is
+// kCaptionHeight (= the same vertical strip as the caption); the gap
+// after it is `kSettingsRowsTopGap`.
+inline constexpr float kSettingsRowsTopGap        =  8.0f;   // traffic band -> first row
 inline constexpr float kSettingsSidebarBottomGap  = 12.0f;
 inline constexpr float kSettingsContentPaddingX   = 12.0f;   // gutter inside content area
 inline constexpr float kSettingsContentPaddingTop = 14.0f;   // caption -> title
