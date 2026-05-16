@@ -25,8 +25,8 @@ runs; the glyph atlas, tabs, and profiles are next.
 | Drop shadow via DWM extended frame | done |
 | ConPTY shell session | done |
 | ANSI / VT100 / xterm escape codes | done |
-| GPU-accelerated glyph atlas | planned |
-| Tabs, splits, profiles | post-MVP |
+| GPU-accelerated glyph atlas | done |
+| Tabs, splits, profiles | 1/3 done |
 
 ## Building
 
