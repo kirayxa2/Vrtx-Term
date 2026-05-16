@@ -13,28 +13,32 @@ inline D2D1::ColorF ToD2D(theme::Color c) {
 void CaptionButton::UpdateLayout(int squircleWidthPx, UINT dpi) {
     using namespace theme;
 
-    const float w        = ToPx(kCaptionButtonWidth,    dpi);
-    const float h        = ToPx(kCaptionButtonHeight,   dpi);
+    const float d        = ToPx(kCaptionButtonDiameter, dpi);
     const float insetX   = ToPx(kCaptionButtonInsetX,   dpi);
     const float captionH = ToPx(kCaptionHeight,         dpi);
 
-    // Vertically centre inside the caption strip; right-anchored at the
-    // squircle's right edge inset by `insetX`. Mirrors the traffic-light
-    // group's left inset, so the chrome reads as symmetric.
+    // Right-anchored at the squircle's right edge inset by `insetX`,
+    // vertically centred on the caption strip. The button is a perfect
+    // circle, so width == height == diameter.
     const float right = static_cast<float>(squircleWidthPx) - insetX;
-    const float left  = right - w;
+    const float left  = right - d;
     const float cy    = captionH * 0.5f;
-    const float top   = cy - h * 0.5f;
-    const float bot   = cy + h * 0.5f;
+    const float top   = cy - d * 0.5f;
+    const float bot   = cy + d * 0.5f;
 
     bounds_ = D2D1::RectF(left, top, right, bot);
 }
 
 bool CaptionButton::HitTest(int x, int y) const {
-    const float fx = static_cast<float>(x);
-    const float fy = static_cast<float>(y);
-    return fx >= bounds_.left && fx < bounds_.right &&
-           fy >= bounds_.top  && fy < bounds_.bottom;
+    // Hit-test against the actual circular shape, not the bounding rect,
+    // so clicks just outside the disc (in the caption strip corners) fall
+    // through to dragging instead of being eaten by the button.
+    const float cx = (bounds_.left + bounds_.right)  * 0.5f;
+    const float cy = (bounds_.top  + bounds_.bottom) * 0.5f;
+    const float r  = (bounds_.right - bounds_.left)  * 0.5f;
+    const float dx = static_cast<float>(x) - cx;
+    const float dy = static_cast<float>(y) - cy;
+    return (dx * dx + dy * dy) <= (r * r);
 }
 
 void CaptionButton::OnMouseMove(int x, int y) {
@@ -68,47 +72,78 @@ void CaptionButton::Render(ID2D1DeviceContext* dc,
                            bool windowActive) const {
     const auto& pal = theme::ActivePalette();
 
-    // Pill background: invisible until hover (or press). The radius is
-    // half the height so the short ends are perfectly rounded.
-    const float radius = (bounds_.bottom - bounds_.top) * 0.5f;
-    const D2D1_ROUNDED_RECT pill{bounds_, radius, radius};
+    const float cx = (bounds_.left + bounds_.right)  * 0.5f;
+    const float cy = (bounds_.top  + bounds_.bottom) * 0.5f;
+    const float r  = (bounds_.right - bounds_.left)  * 0.5f;
+
+    const D2D1_ELLIPSE disc = D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r);
+
+    // ---- Base fill: always visible -------------------------------------
+    //
+    // Apple keeps a faint dark wash under the glyph at all times so the
+    // button's shape reads even when the cursor is nowhere near it. Hover
+    // and press add an extra translucent overlay on top of this base.
+    if (windowActive) {
+        brush->SetColor(ToD2D(pal.captionButtonFill));
+    } else {
+        // Dim the fill on inactive windows so the chrome reads as muted.
+        const auto c = pal.captionButtonFill;
+        brush->SetColor(D2D1::ColorF(c.r, c.g, c.b, c.a * 0.5f));
+    }
+    dc->FillEllipse(disc, brush);
 
     if (windowActive) {
         if (pressed_) {
             brush->SetColor(ToD2D(pal.captionButtonPressed));
-            dc->FillRoundedRectangle(pill, brush);
+            dc->FillEllipse(disc, brush);
         } else if (hovered_) {
             brush->SetColor(ToD2D(pal.captionButtonHover));
-            dc->FillRoundedRectangle(pill, brush);
+            dc->FillEllipse(disc, brush);
         }
     }
 
-    // Chevron-down: two strokes that meet at the bottom centre, opening
-    // upwards in a "v" with a gentle 22deg slope (Apple's chevron uses
-    // ~25deg; close enough at our cell size). The chevron sits a touch
-    // above the pill's vertical centre to keep it optically balanced.
-    const float cx = (bounds_.left + bounds_.right) * 0.5f;
-    const float cy = (bounds_.top  + bounds_.bottom) * 0.5f;
+    // ---- Hairline outline ----------------------------------------------
+    //
+    // Same colour and stroke width as the window border, so the button
+    // visually belongs to the chrome rather than feeling pasted on. We
+    // inset the geometry by half a stroke so the entire stroke is visible
+    // (D2D centres strokes on the path).
+    //
+    // Stroke thickness scales with the disc's actual radius rather than a
+    // hard-coded DPI conversion, which keeps the hairline crisp on any
+    // monitor without us having to thread `dpi_` into Render().
+    const float dpiFactor   = r / std::max(1.0f, theme::kCaptionButtonDiameter * 0.5f);
+    const float strokeAtDpi = std::max(1.0f,
+                                       theme::kWindowBorderWidth * dpiFactor);
 
-    // Chevron is 60% of the pill width, 30% of the pill height.
-    const float chevW = (bounds_.right - bounds_.left) * 0.30f;
-    const float chevH = (bounds_.bottom - bounds_.top) * 0.18f;
+    const D2D1_ELLIPSE outline = D2D1::Ellipse(
+        D2D1::Point2F(cx, cy),
+        r - strokeAtDpi * 0.5f,
+        r - strokeAtDpi * 0.5f);
+    brush->SetColor(ToD2D(pal.windowBorder));
+    dc->DrawEllipse(outline, brush, strokeAtDpi);
 
-    const D2D1_POINT_2F p_left  {cx - chevW, cy - chevH * 0.5f};
-    const D2D1_POINT_2F p_tip   {cx,         cy + chevH * 0.5f};
-    const D2D1_POINT_2F p_right {cx + chevW, cy - chevH * 0.5f};
+    // ---- Chevron-down glyph --------------------------------------------
+    //
+    // Two strokes meeting at the bottom centre. Proportions match Apple's
+    // SF Symbol "chevron.down" inside a 22pt button: the glyph spans 44%
+    // of the disc width and 30% of its height (ratio ~1.5:1, equivalent
+    // to a ~33deg slope per leg).
+    const float chevW = r * 0.44f;   // half-span horizontally
+    const float chevH = r * 0.30f;   // half-span vertically
 
-    // The active-window glyph is full-strength; an inactive window mutes
-    // it like the traffic-lights inactive disc. Bold-but-not-blocky weight
-    // so it reads at small sizes.
+    const D2D1_POINT_2F p_left  {cx - chevW, cy - chevH};
+    const D2D1_POINT_2F p_tip   {cx,         cy + chevH};
+    const D2D1_POINT_2F p_right {cx + chevW, cy - chevH};
+
     const theme::Color glyphCol = windowActive ? pal.captionButtonGlyph
                                                : pal.tlInactive;
     brush->SetColor(ToD2D(glyphCol));
 
-    const float strokePx = std::max(1.0f, chevH * 0.45f);
+    // Stroke ~9% of the disc diameter, clamped >= 1.5px so anti-aliasing
+    // doesn't fade the chevron into nothing at small sizes.
+    const float chevStroke = std::max(1.5f, r * 0.18f);
 
-    // Use a stroke style with rounded caps + miter join so the apex looks
-    // continuous instead of having a tiny gap at the seam.
     ComPtr<ID2D1StrokeStyle> ss;
     D2D1_STROKE_STYLE_PROPERTIES props{};
     props.startCap   = D2D1_CAP_STYLE_ROUND;
@@ -117,8 +152,8 @@ void CaptionButton::Render(ID2D1DeviceContext* dc,
     props.miterLimit = 4.0f;
     factory->CreateStrokeStyle(props, nullptr, 0, ss.GetAddressOf());
 
-    dc->DrawLine(p_left,  p_tip,   brush, strokePx, ss.Get());
-    dc->DrawLine(p_tip,   p_right, brush, strokePx, ss.Get());
+    dc->DrawLine(p_left,  p_tip,   brush, chevStroke, ss.Get());
+    dc->DrawLine(p_tip,   p_right, brush, chevStroke, ss.Get());
 }
 
 }  // namespace mactw::ui
