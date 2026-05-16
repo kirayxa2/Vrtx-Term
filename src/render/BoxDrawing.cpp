@@ -233,6 +233,10 @@ bool DrawRoundedCorner(ID2D1DeviceContext* dc,
 }
 
 }  // namespace
+
+// ---------------------------------------------------------------------------
+
+bool IsBoxDrawing(char32_t cp) {
     return cp >= 0x2500 && cp <= 0x257F;
 }
 
