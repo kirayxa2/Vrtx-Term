@@ -456,24 +456,18 @@ void Renderer::Render(bool windowActive,
         }
     }
 
-    // ---- Tab strip background + divider --------------------------------
+    // ---- Tab strip background ------------------------------------------
+    //
+    // The strip blends into the terminal below: same flat tint as the
+    // squircle surface, no divider line. macOS Terminal uses the same
+    // visual trick — the eye reads the tabs as floating on top of the
+    // terminal, not as a separate toolbar.
     if (drawChevron) {
         const float captionPx = theme::ToPx(theme::kCaptionHeight,  dpi_);
         const float stripPx   = theme::ToPx(theme::kTabStripHeight, dpi_);
         const D2D1_RECT_F stripRect{0.0f, captionPx, swW, captionPx + stripPx};
         brush_->SetColor(ToD2D(pal.tabStripBg));
         d2d_dc_->FillRectangle(stripRect, brush_.Get());
-
-        // 1px hairline along the strip's bottom edge.
-        const float divPx = std::max(1.0f, theme::ToPx(theme::kTabStripDividerY, dpi_));
-        const D2D1_RECT_F divider{
-            0.0f,
-            stripRect.bottom - divPx,
-            swW,
-            stripRect.bottom,
-        };
-        brush_->SetColor(ToD2D(pal.tabStripDivider));
-        d2d_dc_->FillRectangle(divider, brush_.Get());
     }
 
     // ---- Caption chevron-button (hidden while Settings is up) -----------

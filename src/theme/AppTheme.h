@@ -482,8 +482,8 @@ inline constexpr Palette kDarkPalette{
 
     .captionTitle      = Color::FromARGB(0xCCEDEDEF),
     .captionTitleMuted = Color::FromARGB(0x66EDEDEF),
-    .tabStripBg        = Color::FromARGB(0x14000000),
-    .tabStripDivider   = Color::FromARGB(0x22FFFFFF),
+    .tabStripBg        = Color::FromARGB(0x00000000),
+    .tabStripDivider   = Color::FromARGB(0x00FFFFFF),
 
     // System-blue accent in dark mode is brighter than in light to keep
     // contrast against the panel fill.
@@ -574,8 +574,8 @@ inline constexpr Palette kLightPalette{
 
     .captionTitle      = Color::FromARGB(0xCC1A1A1C),
     .captionTitleMuted = Color::FromARGB(0x661A1A1C),
-    .tabStripBg        = Color::FromARGB(0x14000000),
-    .tabStripDivider   = Color::FromARGB(0x22000000),
+    .tabStripBg        = Color::FromARGB(0x00000000),
+    .tabStripDivider   = Color::FromARGB(0x00000000),
 
     .alertScrim       = Color::FromARGB(0x66000000),
     .alertPanelFill   = Color::FromARGB(0xDDFFFFFF),

@@ -7,20 +7,32 @@ namespace vrtx::ui {
 namespace {
 
 // Tab pill metrics (logical pt).
-constexpr float kTabPillH       = 20.0f;   // pill height
-constexpr float kTabMinW        = 48.0f;   // minimum pill width
-constexpr float kTabMaxW        = 160.0f;  // maximum pill width
+//
+// Slightly shorter than before so the strip reads as compact and the
+// label/close-x have room to breathe without crowding the 28pt strip.
+constexpr float kTabPillH       = 18.0f;   // pill height
+constexpr float kTabMinW        = 80.0f;   // minimum pill width (room for label)
+constexpr float kTabMaxW        = 180.0f;  // maximum pill width
 constexpr float kTabGap         = 4.0f;    // gap between pills
-constexpr float kTabFontSize    = 11.5f;   // label font size
-constexpr float kPillRadius     = 6.0f;    // corner radius
+constexpr float kTabFontSize    = 11.0f;   // label font size
+constexpr float kPillRadius     = 5.0f;    // corner radius
 
-// Close × button inside the pill.
-constexpr float kCloseSize      = 14.0f;   // hit area size
-constexpr float kCloseMargin    =  3.0f;   // from right/top edge of pill
+// Close × button inside the pill (right side, macOS-Tahoe style).
+//
+// Smaller than the pill and inset toward the right edge. Clicking
+// outside the close-rect (but inside the pill) just switches/activates
+// the tab, so there's plenty of room for the label even at minimum
+// pill width.
+constexpr float kCloseSize      = 12.0f;   // hit area size
+constexpr float kCloseMargin    =  3.0f;   // from right/vertical edge of pill
 
 // "+" new-tab button metrics.
-constexpr float kPlusSize       = 18.0f;   // circle diameter
-constexpr float kPlusGap        =  5.0f;   // gap between last pill and "+"
+//
+// The button hugs the right edge of the LAST pill (offset by kPlusGap),
+// not the right edge of the strip. The pill row therefore "ends" with
+// a small "+" affordance, just like Windows Terminal / macOS Terminal.
+constexpr float kPlusSize       = 16.0f;   // circle diameter
+constexpr float kPlusGap        =  6.0f;   // gap between last pill and "+"
 
 }  // namespace
 
@@ -81,21 +93,32 @@ void TabBar::RebuildPills() {
         pills_[i].rect   = {x0, pillY, x0 + pillW, pillY + pillHPx};
         pills_[i].active = (i == active_idx_);
 
-        // Close button: top-left corner of the pill (macOS Terminal style).
+        // Close button: vertically-centred against the pill, anchored
+        // to the right edge with kCloseMargin breathing room. macOS
+        // Terminal puts the close-x on the left of the active tab; we
+        // ship the more familiar Chrome / Windows Terminal layout
+        // (right-aligned x), so the label reads left-to-right with the
+        // close affordance trailing.
+        const float closeY = pills_[i].rect.top
+                           + (pillHPx - closeSzPx) * 0.5f;
         pills_[i].closeRect = {
-            pills_[i].rect.left  + closeMarPx,
-            pills_[i].rect.top   + closeMarPx,
-            pills_[i].rect.left  + closeMarPx + closeSzPx,
-            pills_[i].rect.top   + closeMarPx + closeSzPx,
+            pills_[i].rect.right - closeMarPx - closeSzPx,
+            closeY,
+            pills_[i].rect.right - closeMarPx,
+            closeY + closeSzPx,
         };
     }
 
-    // "+" button: pinned to the right edge of the strip.
-    const float plusY = strip_rect_.top + (stripH - plusSzPx) * 0.5f;
+    // "+" button hugs the right edge of the LAST pill - it's a small
+    // companion to the tab row, not a strip-wide control. Vertically
+    // centred against the pill height so the geometry reads as a
+    // single horizontal group.
+    const float lastRight = pills_[n - 1].rect.right;
+    const float plusY     = pillY + (pillHPx - plusSzPx) * 0.5f;
     plus_rect_ = {
-        strip_rect_.right - padXPx - plusSzPx,
+        lastRight + plusGapPx,
         plusY,
-        strip_rect_.right - padXPx,
+        lastRight + plusGapPx + plusSzPx,
         plusY + plusSzPx,
     };
 }
@@ -187,7 +210,10 @@ void TabBar::Render(ID2D1DeviceContext* dc,
                     bool                  windowActive) const {
     if (pills_.empty()) return;
 
-    // Lazily create text format.
+    // Lazily create text format. Left-aligned (label hugs the left edge
+    // of the pill, close-x lives on the right) — this matches how the
+    // tab pills "read" left-to-right and keeps the label visible even
+    // when truncated.
     if (!fmt_ && dwrite) {
         const float fontPx = theme::ToPx(kTabFontSize, dpi_);
         dwrite->CreateTextFormat(
@@ -198,8 +224,10 @@ void TabBar::Render(ID2D1DeviceContext* dc,
             const_cast<TabBar*>(this)->fmt_.GetAddressOf());
         if (fmt_) {
             fmt_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-            fmt_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            fmt_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             fmt_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            DWRITE_TRIMMING trim{DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+            fmt_->SetTrimming(&trim, nullptr);
         }
     }
 
@@ -231,16 +259,25 @@ void TabBar::Render(ID2D1DeviceContext* dc,
 
         // ---- Label (shrink rect to leave room for close button) ----------
         if (fmt_ && i < static_cast<int>(tabs_.size())) {
-            const float labelAlpha = pill.active ? alpha * 0.90f :
-                                     hov         ? alpha * 0.65f :
-                                                   alpha * 0.45f;
+            // Higher base alpha than before so labels are readable on
+            // top of the translucent strip background. The active pill
+            // gets full opacity, hover sits a step below, idle pills
+            // are dimmed but still legible.
+            const float labelAlpha = pill.active ? alpha * 1.00f :
+                                     hov         ? alpha * 0.85f :
+                                                   alpha * 0.65f;
             brush->SetColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, labelAlpha));
 
             // Shrink label rect so it doesn't overlap the × button
-            // (close button is on the LEFT of the pill, macOS Terminal style).
+            // (close button is on the RIGHT of the pill). Left padding
+            // keeps the leading character clear of the pill's rounded
+            // corner; right padding leaves room for the close-x.
             D2D1_RECT_F labelRect = pill.rect;
+            labelRect.left += theme::ToPx(8.0f, dpi_);
             if (showClose)
-                labelRect.left += closeSzPx + theme::ToPx(kCloseMargin, dpi_);
+                labelRect.right -= closeSzPx + theme::ToPx(kCloseMargin, dpi_);
+            else
+                labelRect.right -= theme::ToPx(6.0f, dpi_);
 
             const auto& t = tabs_[i].title;
             dc->DrawTextW(t.c_str(), static_cast<UINT32>(t.size()),
