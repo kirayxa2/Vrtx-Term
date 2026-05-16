@@ -72,6 +72,14 @@ inline constexpr float kTrafficLightDiameter = 13.0f;
 inline constexpr float kTrafficLightSpacing  = 10.0f;
 inline constexpr float kTrafficLightInsetX   = 11.0f;
 
+// Caption "more" button (top-right pill with a chevron-down glyph).
+// Pill metrics roughly match the sidebar / split-view affordances on
+// macOS 26 Tahoe windows. The right inset mirrors `kTrafficLightInsetX`
+// so the chrome reads as left-right symmetric.
+inline constexpr float kCaptionButtonWidth  = 32.0f;
+inline constexpr float kCaptionButtonHeight = 22.0f;
+inline constexpr float kCaptionButtonInsetX = 11.0f;
+
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
 inline constexpr int kDefaultWindowHeight = 560;
@@ -137,6 +145,11 @@ struct Palette {
     Color tlInactive;          // when window is not key/foreground
     Color tlGlyph;              // dark glyph drawn on the colored disc on hover
 
+    // Caption "more" button (top-right pill).
+    Color captionButtonGlyph;   // chevron stroke colour, active window
+    Color captionButtonHover;   // translucent pill background on hover
+    Color captionButtonPressed; // slightly stronger pill on press
+
     // Text
     Color text;
     Color textMuted;
@@ -171,6 +184,10 @@ inline constexpr Palette kDarkPalette{
     .tlMaximize = Color::FromARGB(0xFF28C840),
     .tlInactive = Color::FromARGB(0xFF595959),
     .tlGlyph    = Color::FromARGB(0xC8000000),
+
+    .captionButtonGlyph   = Color::FromARGB(0xCCEDEDEF),
+    .captionButtonHover   = Color::FromARGB(0x22FFFFFF),
+    .captionButtonPressed = Color::FromARGB(0x33FFFFFF),
 
     .text      = Color::FromARGB(0xFFEDEDEF),
     .textMuted = Color::FromARGB(0x99EDEDEF),
@@ -211,6 +228,10 @@ inline constexpr Palette kLightPalette{
     .tlMaximize = Color::FromARGB(0xFF28C840),
     .tlInactive = Color::FromARGB(0xFFB0B0B0),
     .tlGlyph    = Color::FromARGB(0xC8000000),
+
+    .captionButtonGlyph   = Color::FromARGB(0xCC1A1A1C),
+    .captionButtonHover   = Color::FromARGB(0x14000000),
+    .captionButtonPressed = Color::FromARGB(0x22000000),
 
     .text      = Color::FromARGB(0xFF1A1A1C),
     .textMuted = Color::FromARGB(0x991A1A1C),

@@ -190,7 +190,9 @@ void Renderer::Resize(UINT widthPx, UINT heightPx) {
     RecreateBackBufferTarget();
 }
 
-void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
+void Renderer::Render(bool windowActive,
+                      ui::TrafficLights& trafficLights,
+                      ui::CaptionButton& captionButton) {
     if (!d2d_dc_ || !swap_chain_) return;
 
     const auto& pal      = theme::ActivePalette();
@@ -305,6 +307,12 @@ void Renderer::Render(bool windowActive, ui::TrafficLights& trafficLights) {
     // Traffic lights produce squircle-local coordinates already; the active
     // transform places them inside the window correctly.
     trafficLights.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
+                         windowActive);
+
+    // Caption "more" button on the right side of the strip. Drawn under
+    // the same squircle clip so its pill never leaks outside the rounded
+    // corner if a future layout pushes it close to the edge.
+    captionButton.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
                          windowActive);
 
     d2d_dc_->PopLayer();

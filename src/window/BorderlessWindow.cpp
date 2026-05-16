@@ -122,6 +122,19 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     traffic_.UpdateLayout(dpi_);
     Trace("traffic layout done");
 
+    // Caption button needs the current squircle width in physical pixels
+    // (HWND minus 2*margin on each axis). Recompute on every resize / DPI
+    // change too; for the very first layout we read the freshly created
+    // window's client rect.
+    {
+        RECT rc{};
+        ::GetClientRect(hwnd, &rc);
+        const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+        const int sqW = std::max(1, (rc.right - rc.left) - 2 * marginPx);
+        caption_button_.UpdateLayout(sqW, dpi_);
+    }
+    Trace("caption-button layout done");
+
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
     Trace("window shown");
@@ -168,6 +181,13 @@ void BorderlessWindow::OnDpiChanged(UINT newDpi, const RECT* suggested) {
     }
     renderer_.SetDpi(dpi_);
     traffic_.UpdateLayout(dpi_);
+    {
+        RECT rc{};
+        ::GetClientRect(hwnd_, &rc);
+        const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+        const int sqW = std::max(1, (rc.right - rc.left) - 2 * marginPx);
+        caption_button_.UpdateLayout(sqW, dpi_);
+    }
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -366,6 +386,12 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
     if (traffic_.HitTest(wx, wy) != ui::TrafficAction::None) {
         return HTCLIENT;
     }
+    if (caption_button_.HitTest(wx, wy)) {
+        // Inside the pill - not draggable, not resize. The window proc
+        // will receive plain WM_LBUTTON* against this hit so the button
+        // handles its own click.
+        return HTCLIENT;
+    }
     if (wy < captionHpx) {
         return HTCAPTION;
     }
@@ -416,7 +442,8 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 const int wx = pt.x - marginPx;
                 const int wy = pt.y - marginPx;
                 if (IsInsideContent(wx, wy) &&
-                    traffic_.HitTest(wx, wy) == ui::TrafficAction::None) {
+                    traffic_.HitTest(wx, wy) == ui::TrafficAction::None &&
+                    !caption_button_.HitTest(wx, wy)) {
                     ::SetCursor(::LoadCursorW(nullptr, IDC_IBEAM));
                     return TRUE;
                 }
@@ -429,11 +456,17 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
 
-        case WM_SIZE:
+        case WM_SIZE: {
             renderer_.Resize(LOWORD(lp), HIWORD(lp));
+            // Caption button is right-anchored, so it has to be re-laid
+            // out whenever the squircle width changes.
+            const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+            const int sqW = std::max(1, static_cast<int>(LOWORD(lp)) - 2 * marginPx);
+            caption_button_.UpdateLayout(sqW, dpi_);
             SyncPtyToSize();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
+        }
 
         case WM_DPICHANGED: {
             const UINT newDpi = HIWORD(wp);
@@ -543,6 +576,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const int wx = GET_X_LPARAM(lp) - marginPx;
             const int wy = GET_Y_LPARAM(lp) - marginPx;
             traffic_.OnMouseMove(wx, wy);
+            caption_button_.OnMouseMove(wx, wy);
 
             TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
             ::TrackMouseEvent(&tme);
@@ -562,6 +596,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_MOUSELEAVE:
             traffic_.OnMouseLeave();
+            caption_button_.OnMouseLeave();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
 
@@ -573,6 +608,8 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
             if (traffic_.HitTest(wx, wy) != ui::TrafficAction::None) {
                 traffic_.OnLButtonDown(wx, wy);
+            } else if (caption_button_.HitTest(wx, wy)) {
+                caption_button_.OnLButtonDown(wx, wy);
             } else if (IsInsideContent(wx, wy) && session_) {
                 // Begin a fresh selection at this point.
                 int viewRow = 0, col = 0;
@@ -606,7 +643,13 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                         buf.ClearSelection();
                     }
                 }
+            } else if (caption_button_.HitTest(wx, wy)) {
+                caption_button_.OnLButtonUp(wx, wy);
             } else {
+                // Caption button might have been pressed and released
+                // outside; tell it so it can reset its pressed state.
+                caption_button_.OnLButtonUp(wx, wy);
+
                 const auto fired = traffic_.OnLButtonUp(wx, wy);
                 switch (fired) {
                     case ui::TrafficAction::Close:
@@ -668,7 +711,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_PAINT:
-            renderer_.Render(active_, traffic_);
+            renderer_.Render(active_, traffic_, caption_button_);
             ::ValidateRect(hwnd_, nullptr);
             return 0;
 

@@ -27,6 +27,7 @@
 #include "pch.h"
 #include "render/Renderer.h"
 #include "terminal/TerminalSession.h"
+#include "ui/CaptionButton.h"
 #include "ui/TrafficLights.h"
 
 namespace mactw::window {
@@ -46,6 +47,10 @@ public:
     // notifies it on resize, and asks the renderer to draw it. May be
     // null (the window then renders an empty squircle).
     void SetSession(terminal::TerminalSession* s);
+
+    // Access the caption "more" button to attach the user-supplied click
+    // handler from outside (e.g. Application::Run).
+    ui::CaptionButton& GetCaptionButton() { return caption_button_; }
 
 private:
     static LRESULT CALLBACK StaticWndProc(HWND, UINT, WPARAM, LPARAM);
@@ -91,6 +96,7 @@ private:
 
     render::Renderer            renderer_;
     ui::TrafficLights           traffic_;
+    ui::CaptionButton           caption_button_;
     terminal::TerminalSession*  session_{nullptr};
 };
 

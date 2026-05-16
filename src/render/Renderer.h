@@ -31,6 +31,7 @@
 #include "pch.h"
 #include "render/TerminalView.h"
 #include "terminal/TerminalSession.h"
+#include "ui/CaptionButton.h"
 #include "ui/TrafficLights.h"
 
 namespace mactw::render {
@@ -61,7 +62,9 @@ public:
     float TerminalPaddingYPx() const { return terminal_view_.PaddingYPx(); }
 
     // Paint one frame.
-    void Render(bool windowActive, ui::TrafficLights& trafficLights);
+    void Render(bool windowActive,
+                ui::TrafficLights& trafficLights,
+                ui::CaptionButton& captionButton);
 
     UINT          Dpi()        const { return dpi_; }
     UINT          WidthPx()    const { return width_px_; }
