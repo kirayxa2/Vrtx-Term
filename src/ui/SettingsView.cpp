@@ -1,6 +1,8 @@
 #include "ui/SettingsView.h"
 
-namespace mactw::ui {
+#include "window/SquircleGeometry.h"
+
+namespace vrtx::ui {
 
 namespace {
 
@@ -100,7 +102,7 @@ void SettingsView::UpdateLayout(D2D1_RECT_F squircleRect,
 
     // Sidebar pill: top edge sits just below the squircle top (the
     // traffic-lights live inside the caption strip and get absorbed
-    // into the pill's chrome - exactly like macOS Tahoe System
+    // into the pill's chrome - exactly like Vrtx Term System
     // Settings).
     sidebar_.left   = squircleRect.left  + padL;
     sidebar_.top    = squircleRect.top   + padTop;
@@ -327,7 +329,7 @@ bool SettingsView::OnLButtonUp(int x, int y) {
 
 void SettingsView::Render(ID2D1DeviceContext* dc,
                           ID2D1SolidColorBrush* brush,
-                          ID2D1Factory* /*factory*/,
+                          ID2D1Factory* factory,
                           IDWriteFactory* dwrite) const {
     if (!open_ && progress_ <= 0.0f) return;
 
@@ -343,30 +345,38 @@ void SettingsView::Render(ID2D1DeviceContext* dc,
 
     const float fade = ease;
 
-    // ---- Sidebar pill (fill + 1pt hairline outline) --------------------
-    {
-        const D2D1_ROUNDED_RECT panel{sidebar_,
-                                      sidebar_radius_px_,
-                                      sidebar_radius_px_};
+    // ---- Sidebar pill (squircle fill + 1pt hairline outline) -----------
+    //
+    // We use the same continuous-corner geometry as the window itself,
+    // so the pill reads as carved from the same chrome family rather
+    // than as a foreign rounded rectangle floating inside it.
+    if (factory) {
+        auto pillGeom = window::BuildSquirclePathInRect(
+            factory, sidebar_, sidebar_radius_px_,
+            theme::kSquircleSmoothing);
+
         const auto fill = pal.settingsSidebarFill;
         brush->SetColor(D2D1::ColorF(fill.r, fill.g, fill.b, fill.a * fade));
-        dc->FillRoundedRectangle(panel, brush);
+        dc->FillGeometry(pillGeom.Get(), brush);
 
-        // Hairline matching the window border. We inset by half the
-        // stroke width so D2D's centred stroke ends up fully inside
-        // the pill - same trick as for the squircle outline.
+        // Hairline matching the window border. Inset by half the stroke
+        // width so D2D's centred stroke ends up fully inside the pill -
+        // same trick we use for the squircle window outline.
         const float strokeW = std::max(1.0f, sidebar_border_px_);
         const float inset   = strokeW * 0.5f;
-        D2D1_RECT_F r = sidebar_;
-        r.left   += inset;
-        r.top    += inset;
-        r.right  -= inset;
-        r.bottom -= inset;
-        const float rr = std::max(0.0f, sidebar_radius_px_ - inset);
-        const D2D1_ROUNDED_RECT outline{r, rr, rr};
+        D2D1_RECT_F outerR = sidebar_;
+        outerR.left   += inset;
+        outerR.top    += inset;
+        outerR.right  -= inset;
+        outerR.bottom -= inset;
+        auto outlineGeom = window::BuildSquirclePathInRect(
+            factory, outerR,
+            std::max(0.0f, sidebar_radius_px_ - inset),
+            theme::kSquircleSmoothing);
+
         const auto bc = pal.settingsSidebarBorder;
         brush->SetColor(D2D1::ColorF(bc.r, bc.g, bc.b, bc.a * fade));
-        dc->DrawRoundedRectangle(outline, brush, strokeW);
+        dc->DrawGeometry(outlineGeom.Get(), brush, strokeW);
     }
 
     // ---- Done button (caption-strip pill) ------------------------------
@@ -586,35 +596,63 @@ void SettingsView::Render(ID2D1DeviceContext* dc,
                 yc += section_header_px_ * 1.2f + section_header_gap_px_;
             }
 
-            // Card geometry.
+            // Card geometry. Cards use the same continuous-corner
+            // (squircle) shape as the window and the sidebar pill so the
+            // entire chrome family reads as one consistent surface.
             const float cardTop = yc;
             const float cardH   = card_row_h_px_
                                 * static_cast<float>(sec.rows.size());
             const float cardBot = cardTop + cardH;
             if (cardH > 0.0f) {
                 const D2D1_RECT_F cardRect{cx0, cardTop, cx1, cardBot};
-                const D2D1_ROUNDED_RECT card{cardRect,
-                                             card_radius_px_,
-                                             card_radius_px_};
                 const auto fc = pal.settingsCardFill;
                 brush->SetColor(D2D1::ColorF(fc.r, fc.g, fc.b,
                                              fc.a * contentFade));
-                dc->FillRoundedRectangle(card, brush);
+                if (factory) {
+                    auto cardGeom = window::BuildSquirclePathInRect(
+                        factory, cardRect, card_radius_px_,
+                        theme::kSquircleSmoothing);
+                    dc->FillGeometry(cardGeom.Get(), brush);
 
-                // 1pt hairline border.
-                const float strokeW = std::max(1.0f, card_sep_w_px_);
-                const float inset   = strokeW * 0.5f;
-                D2D1_RECT_F br = cardRect;
-                br.left   += inset;
-                br.top    += inset;
-                br.right  -= inset;
-                br.bottom -= inset;
-                const float brr = std::max(0.0f, card_radius_px_ - inset);
-                const D2D1_ROUNDED_RECT bord{br, brr, brr};
-                const auto bc = pal.settingsCardBorder;
-                brush->SetColor(D2D1::ColorF(bc.r, bc.g, bc.b,
-                                             bc.a * contentFade));
-                dc->DrawRoundedRectangle(bord, brush, strokeW);
+                    // 1pt hairline border, inset by half stroke width.
+                    const float strokeW = std::max(1.0f, card_sep_w_px_);
+                    const float inset   = strokeW * 0.5f;
+                    D2D1_RECT_F br = cardRect;
+                    br.left   += inset;
+                    br.top    += inset;
+                    br.right  -= inset;
+                    br.bottom -= inset;
+                    auto borderGeom = window::BuildSquirclePathInRect(
+                        factory, br,
+                        std::max(0.0f, card_radius_px_ - inset),
+                        theme::kSquircleSmoothing);
+                    const auto bc = pal.settingsCardBorder;
+                    brush->SetColor(D2D1::ColorF(bc.r, bc.g, bc.b,
+                                                 bc.a * contentFade));
+                    dc->DrawGeometry(borderGeom.Get(), brush, strokeW);
+                } else {
+                    // Fallback: plain rounded rect (only hit if a caller
+                    // did not pass a factory, which the renderer always
+                    // does).
+                    const D2D1_ROUNDED_RECT card{cardRect,
+                                                 card_radius_px_,
+                                                 card_radius_px_};
+                    dc->FillRoundedRectangle(card, brush);
+                    const float strokeW = std::max(1.0f, card_sep_w_px_);
+                    const float inset   = strokeW * 0.5f;
+                    D2D1_RECT_F br = cardRect;
+                    br.left   += inset;
+                    br.top    += inset;
+                    br.right  -= inset;
+                    br.bottom -= inset;
+                    const float brr = std::max(0.0f,
+                                               card_radius_px_ - inset);
+                    const D2D1_ROUNDED_RECT bord{br, brr, brr};
+                    const auto bc = pal.settingsCardBorder;
+                    brush->SetColor(D2D1::ColorF(bc.r, bc.g, bc.b,
+                                                 bc.a * contentFade));
+                    dc->DrawRoundedRectangle(bord, brush, strokeW);
+                }
 
                 // Rows.
                 for (int r = 0; r < static_cast<int>(sec.rows.size()); ++r) {
@@ -623,7 +661,7 @@ void SettingsView::Render(ID2D1DeviceContext* dc,
                                        + static_cast<float>(r) * card_row_h_px_;
                     const float rowBot = rowTop + card_row_h_px_;
 
-                    // Hover highlight (Apple uses a subtle row highlight
+                    // Hover highlight (We use a subtle row highlight
                     // on tappable rows). Only show on rows that do
                     // something on click.
                     const bool tappable =
@@ -652,7 +690,7 @@ void SettingsView::Render(ID2D1DeviceContext* dc,
                     }
 
                     // Hairline separator below the row (not for the last
-                    // one, and inset on the left to match Apple).
+                    // one, and inset on the left like a grouped table).
                     if (r + 1 < static_cast<int>(sec.rows.size())) {
                         const auto sc = pal.settingsCardSeparator;
                         brush->SetColor(D2D1::ColorF(sc.r, sc.g, sc.b,
@@ -782,4 +820,4 @@ void SettingsView::Render(ID2D1DeviceContext* dc,
     dc->SetTransform(prev);
 }
 
-}  // namespace mactw::ui
+}  // namespace vrtx::ui

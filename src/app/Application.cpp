@@ -2,7 +2,7 @@
 
 #include <cstdio>
 
-namespace mactw::app {
+namespace vrtx::app {
 
 namespace {
 
@@ -10,7 +10,7 @@ void Trace(const char* msg) {
     wchar_t tempDir[MAX_PATH] = {};
     if (!::GetTempPathW(MAX_PATH, tempDir)) return;
     wchar_t path[MAX_PATH] = {};
-    std::swprintf(path, MAX_PATH, L"%smactermwin.log", tempDir);
+    std::swprintf(path, MAX_PATH, L"%svrtxterm.log", tempDir);
     FILE* f = nullptr;
     if (_wfopen_s(&f, path, L"a") == 0 && f) {
         std::fprintf(f, "  app: %s\n", msg);
@@ -28,7 +28,7 @@ int Application::Run(HINSTANCE hInstance) {
     ::SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     Trace("DPI awareness set");
 
-    window_.Create(hInstance, L"MacTermWin");
+    window_.Create(hInstance, L"Vrtx Term");
     Trace("window created");
 
     // Spawn the shell once the window has its first valid size. The window
@@ -99,14 +99,14 @@ int Application::Run(HINSTANCE hInstance) {
             [this, ru]() {
                 window_.ShowAlert(
                     ru ? L"О программе" : L"About",
-                    ru ? L"MacTermWin\nТерминал в стиле macOS Tahoe для Windows."
-                       : L"MacTermWin\nA macOS Tahoe-styled terminal for Windows.",
+                    ru ? L"Vrtx Term\nНативный эмулятор терминала для Windows."
+                       : L"Vrtx Term\nA native terminal emulator for Windows.",
                     L"OK");
             }
         });
     }
     // Populate the Settings sheet sections. Each item is a category
-    // in the sidebar with one or more "cards" (Apple grouped table
+    // in the sidebar with one or more "cards" (grouped table
     // sections) of rows in the content pane.
     //
     // The handlers wired here are intentionally minimal: toggles flip
@@ -126,7 +126,7 @@ int Application::Run(HINSTANCE hInstance) {
         // Localised primary-button label.
         s.SetDoneLabel(ru ? L"Готово" : L"Done");
 
-        // Apple's tile palette for category icons.
+        // Tile palette for category icons.
         const theme::Color kTileGray   = theme::Color::FromARGB(0xFF8E8E93);
         const theme::Color kTilePurple = theme::Color::FromARGB(0xFFAF52DE);
         const theme::Color kTileBlue   = theme::Color::FromARGB(0xFF0A84FF);
@@ -191,7 +191,7 @@ int Application::Run(HINSTANCE hInstance) {
             theme.header = ru ? L"ТЕМА" : L"THEME";
             theme.rows.push_back(Row{RowKind::Value,
                 ru ? L"Тема"   : L"Theme",
-                ru ? L"Tahoe Dark" : L"Tahoe Dark",
+                ru ? L"Dark" : L"Dark",
                 false, true, true, nullptr, nullptr});
             theme.rows.push_back(Row{RowKind::Value,
                 ru ? L"Системный акцент" : L"Accent colour",
@@ -215,8 +215,8 @@ int Application::Run(HINSTANCE hInstance) {
                 ru ? L"Тень под окном" : L"Window shadow",
                 L"", true, false, true, nullptr, nullptr});
             win.rows.push_back(Row{RowKind::Toggle,
-                ru ? L"Прозрачное стекло (Liquid Glass)"
-                   : L"Liquid Glass background",
+                ru ? L"Прозрачное стекло "
+                   : L"Translucent background",
                 L"", false, false, true, nullptr, nullptr});
             it.sections.push_back(std::move(win));
 
@@ -235,7 +235,7 @@ int Application::Run(HINSTANCE hInstance) {
             style.header = ru ? L"СТИЛЬ" : L"STYLE";
             style.rows.push_back(Row{RowKind::Value,
                 ru ? L"Шаблон"           : L"Preset",
-                ru ? L"MacTerm (стандарт)" : L"MacTerm (default)",
+                ru ? L"Vrtx (стандарт)" : L"Vrtx (default)",
                 false, true, true, nullptr, nullptr});
             style.rows.push_back(Row{RowKind::Toggle,
                 ru ? L"Двухстрочный промпт" : L"Two-line prompt",
@@ -321,7 +321,7 @@ int Application::Run(HINSTANCE hInstance) {
             pal.header = ru ? L"ПАЛИТРА" : L"PALETTE";
             pal.rows.push_back(Row{RowKind::Value,
                 ru ? L"ANSI-палитра" : L"ANSI palette",
-                ru ? L"MacTerm Pro"  : L"MacTerm Pro",
+                ru ? L"Vrtx Pro"  : L"Vrtx Pro",
                 false, true, true, nullptr, nullptr});
             pal.rows.push_back(Row{RowKind::Toggle,
                 ru ? L"Жирный = яркий"
@@ -351,7 +351,7 @@ int Application::Run(HINSTANCE hInstance) {
             app.header = ru ? L"ПРИЛОЖЕНИЕ" : L"APPLICATION";
             app.rows.push_back(Row{RowKind::Value,
                 ru ? L"Имя"     : L"Name",
-                L"MacTermWin", false, false, true, nullptr, nullptr});
+                L"Vrtx Term", false, false, true, nullptr, nullptr});
             app.rows.push_back(Row{RowKind::Value,
                 ru ? L"Версия"  : L"Version",
                 L"0.1.0 (alpha)", false, false, true, nullptr, nullptr});
@@ -377,14 +377,15 @@ int Application::Run(HINSTANCE hInstance) {
 
             Section legal{};
             legal.footer = ru
-                ? L"MacTermWin — экспериментальный терминал в стиле macOS 26 "
-                  L"Tahoe для Windows. Apple, macOS и Tahoe — товарные знаки "
-                  L"Apple Inc. и используются здесь только для описания "
-                  L"визуального стиля."
-                : L"MacTermWin is an experimental macOS 26 Tahoe-styled "
-                  L"terminal for Windows. Apple, macOS and Tahoe are "
-                  L"trademarks of Apple Inc., used here only to describe "
-                  L"the visual style.";
+                ? L"Vrtx Term — экспериментальный нативный эмулятор "
+                  L"терминала для Windows. Открытый исходный код, без "
+                  L"использования сторонних UI-фреймворков: окно, тени, "
+                  L"меню и Settings рисуются через DirectComposition + "
+                  L"Direct2D."
+                : L"Vrtx Term is an experimental native terminal emulator "
+                  L"for Windows. Open source, no third-party UI frameworks: "
+                  L"the window, shadows, menus, and Settings sheet are all "
+                  L"drawn through DirectComposition + Direct2D.";
             it.sections.push_back(std::move(legal));
 
             s.AddItem(std::move(it));
@@ -405,4 +406,4 @@ int Application::Run(HINSTANCE hInstance) {
     return static_cast<int>(msg.wParam);
 }
 
-}  // namespace mactw::app
+}  // namespace vrtx::app

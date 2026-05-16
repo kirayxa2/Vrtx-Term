@@ -1,12 +1,12 @@
-// Theme constants and colors that mirror macOS 26 "Tahoe".
+// Theme constants and colors that mirror Vrtx Term.
 //
-// Apple publishes three window classes with three corner radii:
+// Three common window-chrome classes with three corner radii:
 //
 //   Toolbar window         26pt   <- has a real toolbar (Finder, Mail, Safari)
 //   Compact toolbar window 20pt
 //   Titlebar window        16pt   <- thin title strip; Terminal, Notes, TextEdit
 //
-// MacTermWin's MVP behaves like a "Titlebar window": we ship traffic
+// VrtxTerm's MVP behaves like a "Titlebar window": we ship traffic
 // lights in a thin caption strip but do not have a separate toolbar yet,
 // so 16pt is the matching radius. When tabs and toolbar land we will
 // revisit.
@@ -18,9 +18,9 @@
 
 #include "pch.h"
 
-namespace mactw::theme {
+namespace vrtx::theme {
 
-// ---- Corner radii (Apple-spec) ---------------------------------------------
+// ---- Corner radii ---------------------------------------------
 
 inline constexpr float kRadiusTitlebarWindow       = 16.0f;
 inline constexpr float kRadiusCompactToolbarWindow = 20.0f;
@@ -29,9 +29,9 @@ inline constexpr float kRadiusToolbarWindow        = 26.0f;
 // Currently active class.
 inline constexpr float kWindowCornerRadius = kRadiusTitlebarWindow;
 
-// Squircle smoothing factor. Hardcoded at 0.6 (Apple `.continuous` /
-// figma-squircle iOS-7 icon shape) inside SquircleGeometry.cpp via the
-// published Figma coefficients.
+// Squircle smoothing factor. Hardcoded at 0.6 (continuous-corner /
+// continuous-corner icon shape) inside SquircleGeometry.cpp via the
+// published continuous-corner coefficients.
 inline constexpr float kSquircleSmoothing = 0.6f;
 
 // ---- Chrome metrics (logical pt) -------------------------------------------
@@ -40,7 +40,7 @@ inline constexpr float kSquircleSmoothing = 0.6f;
 // on every side so the blurred shadow has room; the squircle itself is
 // drawn with offset (margin, margin) inside the HWND.
 //
-// Values mirror the macOS Tahoe reference SVG:
+// Values mirror the our reference design:
 //     filter: drop-shadow(0 5pt 15pt rgba(0,0,0,0.30))
 inline constexpr float kShadowMargin   = 28.0f;  // >= shadowOffsetY + 2*blur
 inline constexpr float kShadowOffsetY  =  5.0f;
@@ -48,9 +48,9 @@ inline constexpr float kShadowBlurStd  = 15.0f;
 inline constexpr float kShadowAlpha    =  0.30f;
 
 // These five values were dialled in by hand against side-by-side reference
-// screenshots of macOS 26 Tahoe Terminal on the live tweaker (`[`/`]` etc.,
+// screenshots of our reference design on the live tweaker (`[`/`]` etc.,
 // since removed). They are the final shipping numbers; do not "round" them
-// to the Apple HIG canonical values - the HIG values look slightly off at
+// to the canonical values - the HIG values look slightly off at
 // our DPI / scale.
 
 // Height of the draggable caption strip at the top of the window.
@@ -60,7 +60,7 @@ inline constexpr float kCaptionHeight = 31.0f;
 inline constexpr float kResizeBorder = 6.0f;
 
 // 1pt hairline outline drawn around the squircle, mirrors the thin light
-// rim macOS puts on every window. The colour comes from
+// light rim that we draw on the squircle. The colour comes from
 // `Palette.windowBorder` (a low-alpha white in the dark theme).
 inline constexpr float kWindowBorderWidth = 1.0f;
 
@@ -74,13 +74,13 @@ inline constexpr float kTrafficLightInsetX   = 11.0f;
 
 // Caption "more" button (top-right disc with a chevron-down glyph).
 //
-// Apple Tahoe uses a perfectly round button matching the diameter of a
+// We use a perfectly round button matching the diameter of a
 // traffic light, with an always-visible faint dark fill and a 1pt
 // hairline outline that mirrors the window border. Hover lifts the fill
 // a touch; press lifts it slightly more.
 //
 // Width == Height == diameter. The right inset is tighter than the
-// traffic-lights' left inset by design - Apple anchors the toolbar
+// traffic-lights' left inset by design - we anchor the toolbar
 // affordance closer to the corner so the chrome reads asymmetrically
 // (chunkier on the close-side, leaner on the far edge).
 //
@@ -115,13 +115,13 @@ inline constexpr float kCaptionMenuShadowBlur    = 20.0f;
 inline constexpr float kCaptionMenuShadowAlpha   = 0.30f;
 
 // Animation duration for opening/closing the menu, in milliseconds.
-// 220ms is the Apple-stock spring constant for popovers - long enough
+// 220ms is the spring constant for popovers - long enough
 // to feel deliberate, short enough not to delay the user.
 inline constexpr int kCaptionMenuAnimDurationMs = 220;
 
 // ---- Alert dialog (in-window) ---------------------------------------------
 //
-// macOS Tahoe replaces native NSAlert with a Liquid Glass sheet that
+// We replace the native MessageBoxW with our own in-window sheet that
 // drops down inside the host window. We render exactly the same: a
 // dark scrim covers the terminal area, a rounded panel fades / scales
 // in on top, and the primary button is highlighted in the system
@@ -143,7 +143,7 @@ inline constexpr int   kAlertAnimDurationMs = 220;
 
 // ---- Settings sheet (in-window) ------------------------------------------
 //
-// macOS 26 Tahoe System Settings, layout (no scrim, no blur — the sheet
+// the Settings sheet, layout (no scrim, no blur — the sheet
 // completely replaces the terminal area while it's up):
 //
 //   +--squircle (caption strip stays at top)---------------------------+
@@ -164,14 +164,14 @@ inline constexpr int   kAlertAnimDurationMs = 220;
 //   * Content is the bare squircle to the right with a small gutter
 //     between it and the sidebar. No card / wrapper is drawn under
 //     the controls; future toggles / pickers / sliders will sit
-//     directly on the window surface, like Apple's panes.
+//     directly on the window surface, like a system Settings pane.
 //   * Done is a system-blue pill in the top-right of the caption
 //     strip, replacing the chevron-button while the sheet is up.
 
 // Sidebar pill is a tall floating capsule whose TOP edge sits flush
 // against the squircle top (with a hair gap), so the traffic-lights end
 // up *inside* the pill - they read as part of the sidebar's chrome,
-// exactly like Apple's Tahoe System Settings. The pill therefore has
+// exactly like the rest of the Settings sheet. The pill therefore has
 // to start at y = squircle.top + kSettingsOuterPaddingTop, not below
 // the caption strip.
 inline constexpr float kSettingsSidebarWidth      = 200.0f;
@@ -198,7 +198,7 @@ inline constexpr float kSettingsTrafficShiftX     = 12.0f;
 //
 // 5pt nudges the disc centre down so there's roughly the same
 // breathing room above each disc as on its sides, matching how
-// Apple's macOS Tahoe System Settings spaces the lights inside the
+// the Settings sheet spaces the lights inside the
 // sidebar header.
 inline constexpr float kSettingsTrafficShiftY     =  5.0f;
 inline constexpr float kSettingsSidebarGap        = 12.0f;   // sidebar pill -> content
@@ -223,7 +223,7 @@ inline constexpr float kSettingsRowsTopGap        =  8.0f;   // traffic band -> 
 inline constexpr float kSettingsSidebarBottomGap  = 12.0f;
 inline constexpr float kSettingsContentPaddingX   = 12.0f;   // gutter inside content area
 inline constexpr float kSettingsContentPaddingTop = 14.0f;   // caption -> title
-inline constexpr float kSettingsTitleSize         = 22.0f;   // pane title (Tahoe System Settings is ~22pt)
+inline constexpr float kSettingsTitleSize         = 22.0f;   // pane title (the Settings sheet is ~22pt)
 inline constexpr float kSettingsTitleBottomGap    = 14.0f;
 inline constexpr float kSettingsBodyTextSize      = 13.0f;
 inline constexpr float kSettingsDoneWidth         = 88.0f;   // primary Done pill
@@ -239,9 +239,9 @@ inline constexpr int   kSettingsAnimDurationMs    = 260;
 // solid silhouette that floats inside the content area.
 inline constexpr float kSettingsSidebarBorderWidth = 1.0f;
 
-// ---- Settings content cards (Apple grouped table) -------------------------
+// ---- Settings content cards (grouped table) -------------------------
 //
-// Tahoe System Settings groups rows into rounded "cards" stacked
+// the Settings sheet groups rows into rounded "cards" stacked
 // vertically. Each card has:
 //   * an optional small all-caps header above (13pt, secondary text)
 //   * a translucent rounded fill (radius 12pt)
@@ -253,7 +253,7 @@ inline constexpr float kSettingsSidebarBorderWidth = 1.0f;
 inline constexpr float kSettingsCardRadius        = 12.0f;
 inline constexpr float kSettingsCardSpacing       = 18.0f;   // between cards
 inline constexpr float kSettingsCardPaddingX      = 16.0f;   // inside row, horizontal
-inline constexpr float kSettingsCardRowHeight     = 44.0f;   // Apple stock
+inline constexpr float kSettingsCardRowHeight     = 44.0f;   // stock value
 inline constexpr float kSettingsCardSeparatorInset= 16.0f;   // hairline left inset
 inline constexpr float kSettingsCardSeparatorWidth=  1.0f;   // hairline thickness
 inline constexpr float kSettingsSectionHeaderSize = 13.0f;
@@ -264,14 +264,14 @@ inline constexpr float kSettingsRowChevronSize    = 11.0f;   // the > glyph
 inline constexpr float kSettingsRowChevronGap     =  6.0f;   // value -> chevron
 inline constexpr float kSettingsRowEndPadding     = 14.0f;   // right edge breathing room
 
-// Toggle (UISwitch). Apple's switch is 38x22 with an 18pt knob.
+// Toggle pill. The's switch is 38x22 with an 18pt knob.
 inline constexpr float kSettingsToggleWidth       = 38.0f;
 inline constexpr float kSettingsToggleHeight      = 22.0f;
 inline constexpr float kSettingsToggleKnob        = 18.0f;
 inline constexpr float kSettingsToggleKnobInset   =  2.0f;   // knob -> pill edge
 
 // Section "footer" — a small grey paragraph sometimes drawn UNDER a
-// card (Apple uses it for "Privacy notice" style explainers). Same
+// card (used for "Privacy notice" style explainers). Same
 // font as the section header but slightly larger leading.
 inline constexpr float kSettingsFooterTextSize    = 12.0f;
 inline constexpr float kSettingsFooterTopGap      =  6.0f;   // card -> footer
@@ -284,7 +284,7 @@ inline constexpr int kDefaultWindowHeight = 560;
 // ---- Terminal grid metrics -------------------------------------------------
 
 // Padding between the inner edge of the squircle and the first / last cell
-// of the grid. Apple's Terminal uses a generous left/right gutter; the top
+// of the grid. We use a generous left/right gutter; the top
 // gutter starts immediately below the caption strip.
 inline constexpr float kTerminalPaddingX = 12.0f;
 inline constexpr float kTerminalPaddingY =  8.0f;
@@ -299,7 +299,7 @@ inline constexpr wchar_t kTerminalFontFamily[] = L"Cascadia Code";
 inline constexpr float kTerminalFontSize = 13.0f;
 
 // Line-height multiplier on top of the font's natural cell height. 1.20
-// gives macOS Terminal-like breathing room without looking sparse.
+// gives comfortable breathing room without looking sparse.
 inline constexpr float kTerminalLineHeight = 1.20f;
 
 // ---- Colors ----------------------------------------------------------------
@@ -348,7 +348,7 @@ struct Palette {
     Color captionButtonHover;   // translucent overlay added on hover
     Color captionButtonPressed; // slightly stronger overlay on press
 
-    // Caption "more" menu (Liquid Glass dropdown).
+    // Caption "more" menu (translucent dropdown).
     Color captionMenuFill;          // panel base fill
     Color captionMenuRowHover;      // translucent overlay for hovered row
     Color captionMenuText;          // label + icon colour
@@ -365,13 +365,13 @@ struct Palette {
     Color alertButtonHover;  // primary button hover overlay
     Color alertButtonText;   // primary button glyph
 
-    // In-window Settings sheet (Tahoe System Settings clone).
+    // In-window Settings sheet (the Settings sheet clone).
     //
     // The sheet replaces the terminal: there's no scrim or blur. The
     // sidebar is a separate floating rounded pill (radius == window
     // radius); the content area is the bare squircle with a small
-    // gutter. Tile colours are the canonical SF Symbols-tinted
-    // backgrounds Apple uses for category icons.
+    // gutter. Tile colours are the canonical tinted/saturated
+    // backgrounds typically used for category icons.
     Color settingsSidebarFill;  // floating sidebar pill fill
     Color settingsSidebarBorder;// 1pt hairline around the sidebar pill
     Color settingsRowHover;     // hovered sidebar row overlay
@@ -386,18 +386,18 @@ struct Palette {
     Color settingsDoneHover;    // Done hover overlay (additive)
     Color settingsDoneText;     // Done glyph colour
 
-    // Content cards (Apple grouped table). Each "Section" renders as
+    // Content cards (grouped table). Each "Section" renders as
     // one of these cards with rows inside it.
     Color settingsCardFill;       // rounded card background
     Color settingsCardBorder;     // 1pt hairline around the card
     Color settingsCardSeparator;  // 1pt hairline between rows
     Color settingsSectionHeader;  // small grey label above each card
     Color settingsRowLabel;       // primary row text
-    Color settingsRowValue;       // trailing value text (e.g. "Tahoe Dark")
+    Color settingsRowValue;       // trailing value text (e.g. "Dark")
     Color settingsRowChevron;     // disclosure chevron glyph
     Color settingsRowFooter;      // small description paragraph under cards
 
-    // Toggle (UISwitch).
+    // Toggle pill.
     Color settingsToggleOff;      // pill fill when off
     Color settingsToggleOn;       // pill fill when on (system green)
     Color settingsToggleKnob;     // knob colour
@@ -420,7 +420,7 @@ struct Palette {
     Color cursor;              // block cursor color when window is focused
 };
 
-// Apple-flavored dark palette. Values measured visually against macOS Tahoe
+// Default dark palette. Values measured visually against Vrtx Term
 // reference screenshots; tweak in code, not at runtime.
 //
 // All alphas are 1.0 here: the MVP does not use acrylic blur, so the window
@@ -487,7 +487,7 @@ inline constexpr Palette kDarkPalette{
     .text      = Color::FromARGB(0xFFEDEDEF),
     .textMuted = Color::FromARGB(0x99EDEDEF),
 
-    // ANSI 16: macOS Terminal "Pro" scheme, slightly desaturated for dark bg.
+    // ANSI 16: terminal "Pro" scheme, slightly desaturated for dark bg.
     .ansi = {
         Color::FromARGB(0xFF1C1C1F),  //  0 black
         Color::FromARGB(0xFFE05561),  //  1 red
@@ -511,7 +511,7 @@ inline constexpr Palette kDarkPalette{
     .cursor     = Color::FromARGB(0xCCEDEDEF),
 };
 
-// Light palette (for future "Tahoe Light" theme). Currently unused; kept here
+// Light palette (for future "Light" theme). Currently unused; kept here
 // so the rest of the code can already reference Theme::active().
 inline constexpr Palette kLightPalette{
     .windowTint        = Color::FromARGB(0xA0F4F4F6),
@@ -610,4 +610,4 @@ inline int ToPxInt(float pt, UINT dpi) {
     return static_cast<int>(std::lround(ToPx(pt, dpi)));
 }
 
-}  // namespace mactw::theme
+}  // namespace vrtx::theme

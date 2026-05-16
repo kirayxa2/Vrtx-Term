@@ -1,6 +1,6 @@
-// Liquid Glass backdrop, level 1: real-time acrylic blur of whatever is
+// Translucent backdrop: real-time acrylic blur of whatever is
 // behind the window. Layered on top, the renderer paints a tint and (later)
-// noise to match the macOS Tahoe frosted-glass look.
+// noise to match the frosted-glass look we want.
 //
 // Implementation uses the undocumented but stable `SetWindowCompositionAttribute`
 // + ACCENT_ENABLE_ACRYLICBLURBEHIND, which works identically on Windows 10
@@ -12,7 +12,7 @@
 
 #include "pch.h"
 
-namespace mactw::window {
+namespace vrtx::window {
 
 // Apply (or refresh) acrylic blur on the window. Color is the additional tint
 // the OS applies inside the blur — we pass a near-zero-alpha value because we
@@ -25,4 +25,4 @@ bool ApplyAcrylicBackdrop(HWND hwnd, uint32_t accentColorABGR = 0x01000000u);
 // Remove any composition effect from the window.
 void RemoveBackdrop(HWND hwnd);
 
-}  // namespace mactw::window
+}  // namespace vrtx::window

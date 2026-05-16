@@ -1,4 +1,4 @@
-# Building MacTermWin
+# Building VrtxTerm
 
 ## Prerequisites
 
@@ -38,14 +38,14 @@ PATH.
 Open the **x64 Native Tools Command Prompt for VS 2022** (Start menu → search). Then:
 
 ```bat
-git clone https://github.com/kirayxa2/MacTermWin.git
-cd MacTermWin
+git clone https://github.com/kirayxa2/VrtxTerm.git
+cd VrtxTerm
 
 cmake -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
 
-The binary lands at `build\bin\Release\MacTermWin.exe`.
+The binary lands at `build\bin\Release\VrtxTerm.exe`.
 
 For a debug build:
 
@@ -73,7 +73,7 @@ Acrylic backdrop requires:
   acceleration)
 
 If you see a flat tinted window without blur, check the Settings → System → Display →
-Graphics settings: GPU acceleration must be enabled for `MacTermWin.exe`.
+Graphics settings: GPU acceleration must be enabled for `VrtxTerm.exe`.
 
 ## Running tests
 

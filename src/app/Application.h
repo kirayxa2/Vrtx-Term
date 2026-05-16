@@ -7,7 +7,7 @@
 #include "terminal/TerminalSession.h"
 #include "window/BorderlessWindow.h"
 
-namespace mactw::app {
+namespace vrtx::app {
 
 class Application {
 public:
@@ -18,4 +18,4 @@ private:
     terminal::TerminalSession  session_;
 };
 
-}  // namespace mactw::app
+}  // namespace vrtx::app

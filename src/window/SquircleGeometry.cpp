@@ -1,15 +1,15 @@
 #include "window/SquircleGeometry.h"
 
-namespace mactw::window {
+namespace vrtx::window {
 
 namespace {
 
 // ---------------------------------------------------------------------------
-// Figma corner-smoothing 0.6 / Apple `.continuous` squircle path.
+// Continuous-corner (squircle) path, smoothing 0.6.
 //
 // Coefficients verified against:
-//   * Figma's cornerSmoothing = 0.6 plugin output,
-//   * "Desperately Seeking Squircles" (Figma engineering blog),
+//   * the cornerSmoothing = 0.6 reference geometry,
+//   * the geometric derivation of G2-continuous rounded corners,
 //   * the squircle.js / Tailwind CSS shape() reference utility,
 //   * direct geometric derivation (see comments below).
 //
@@ -63,7 +63,13 @@ ComPtr<ID2D1PathGeometry> BuildSquirclePath(ID2D1Factory* factory,
                                             float h,
                                             float radius,
                                             float /*smoothing*/) {
-    radius = std::clamp(radius, 0.0f, std::min(w, h) * 0.5f);
+    // The corner footprint along each edge is kP * r (= 1.6 * r). Two
+    // corners share each edge, so r must satisfy 2 * kP * r <= edge length.
+    // Hard-clamp here so we degrade gracefully on tiny shapes (1-row
+    // cards, very narrow toggles) instead of producing self-intersecting
+    // beziers.
+    const float maxR = std::min(w, h) / (2.0f * kP);
+    radius = std::clamp(radius, 0.0f, std::max(0.0f, maxR));
 
     const float r  = radius;
     const float p  = kP  * r;
@@ -144,4 +150,33 @@ ComPtr<ID2D1PathGeometry> BuildSquirclePath(ID2D1Factory* factory,
     return geom;
 }
 
-}  // namespace mactw::window
+ComPtr<ID2D1PathGeometry> BuildSquirclePathInRect(ID2D1Factory* factory,
+                                                  D2D1_RECT_F rect,
+                                                  float radius,
+                                                  float smoothing) {
+    // Build the path in local coordinates (0,0)-(w,h), then bake the
+    // translation into a brand-new path so callers can FillGeometry /
+    // DrawGeometry without setting any extra transform.
+    const float w = std::max(0.0f, rect.right  - rect.left);
+    const float h = std::max(0.0f, rect.bottom - rect.top);
+    auto local = BuildSquirclePath(factory, w, h, radius, smoothing);
+
+    ComPtr<ID2D1PathGeometry> baked;
+    ThrowIfFailed(factory->CreatePathGeometry(baked.GetAddressOf()),
+                  "ID2D1Factory::CreatePathGeometry (baked)");
+
+    ComPtr<ID2D1GeometrySink> sink;
+    ThrowIfFailed(baked->Open(sink.GetAddressOf()),
+                  "ID2D1PathGeometry::Open (baked)");
+
+    const D2D1_MATRIX_3X2_F m = D2D1::Matrix3x2F::Translation(rect.left,
+                                                              rect.top);
+    ThrowIfFailed(local->Simplify(
+                      D2D1_GEOMETRY_SIMPLIFICATION_OPTION_CUBICS_AND_LINES,
+                      &m, sink.Get()),
+                  "ID2D1PathGeometry::Simplify");
+    ThrowIfFailed(sink->Close(), "ID2D1GeometrySink::Close (baked)");
+    return baked;
+}
+
+}  // namespace vrtx::window

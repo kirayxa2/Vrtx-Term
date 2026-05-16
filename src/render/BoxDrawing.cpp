@@ -1,6 +1,6 @@
 #include "render/BoxDrawing.h"
 
-namespace mactw::render::box {
+namespace vrtx::render::box {
 
 namespace {
 
@@ -304,4 +304,4 @@ bool DrawGlyph(ID2D1DeviceContext* dc,
     return true;
 }
 
-}  // namespace mactw::render::box
+}  // namespace vrtx::render::box

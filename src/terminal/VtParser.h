@@ -27,7 +27,7 @@
 
 #include <functional>
 
-namespace mactw::terminal {
+namespace vrtx::terminal {
 
 // Callback that sends bytes back to the pty (DSR / DA replies).
 using WriteBackFn = std::function<void(const char* data, size_t len)>;
@@ -97,4 +97,4 @@ private:
     char32_t         utf8_acc_{0};
 };
 
-}  // namespace mactw::terminal
+}  // namespace vrtx::terminal

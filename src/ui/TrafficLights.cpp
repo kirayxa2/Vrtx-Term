@@ -1,6 +1,6 @@
 #include "ui/TrafficLights.h"
 
-namespace mactw::ui {
+namespace vrtx::ui {
 
 namespace {
 
@@ -35,7 +35,7 @@ void TrafficLights::UpdateLayout(UINT dpi) {
 
     const auto& pal = ActivePalette();
 
-    // Order matches macOS: close, minimize, maximize, left to right.
+    // Order: close, minimize, maximize, left to right.
     const TrafficAction actions[3]{
         TrafficAction::Close,
         TrafficAction::Minimize,
@@ -184,7 +184,7 @@ void TrafficLights::DrawGlyph(ID2D1DeviceContext* dc,
             break;
         }
         case TrafficAction::Maximize: {
-            // Two filled triangles (Apple's "fullscreen" arrow style), drawn
+            // Two filled triangles (two filled triangles, fullscreen-arrow style), drawn
             // through a path geometry.
             ComPtr<ID2D1PathGeometry> path;
             if (FAILED(factory->CreatePathGeometry(path.GetAddressOf()))) break;
@@ -217,4 +217,4 @@ void TrafficLights::DrawGlyph(ID2D1DeviceContext* dc,
     }
 }
 
-}  // namespace mactw::ui
+}  // namespace vrtx::ui

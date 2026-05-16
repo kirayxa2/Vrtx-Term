@@ -1,5 +1,5 @@
-// In-window Settings sheet rendered through D2D - macOS 26 Tahoe
-// System Settings clone.
+// In-window Settings sheet rendered through D2D - the Vrtx Term
+// In-window Settings sheet rendered through D2D.
 //
 // Layout (no scrim, no blur — the sheet **replaces** the terminal area):
 //
@@ -20,16 +20,16 @@
 //   * Content area is the bare squircle to the right of the pill.
 //     Each "Section" inside the active item renders as one rounded
 //     "card" - a translucent panel with rows and 1pt hairline
-//     separators between them, exactly like Tahoe System Settings.
+//     separators between them, exactly like the Settings sheet.
 //   * Done is a system-blue pill in the top-right of the caption
 //     strip (it replaces the chrome chevron-button while open).
 
 #pragma once
 
 #include "pch.h"
-#include "theme/TahoeTheme.h"
+#include "theme/AppTheme.h"
 
-namespace mactw::ui {
+namespace vrtx::ui {
 
 class SettingsView {
 public:
@@ -39,12 +39,12 @@ public:
 
     // ---- Row model -------------------------------------------------------
     //
-    // Apple's grouped table cells come in a small set of flavours.
+    // Grouped-table cells come in a small set of flavours.
     // Plain   - just a label (and optional chevron). on_pick fires
     //           when clicked.
-    // Value   - label + trailing string (e.g. "Tahoe Dark") + optional
+    // Value   - label + trailing string (e.g. "Dark") + optional
     //           chevron.
-    // Toggle  - label + UISwitch on the right. Click anywhere on the
+    // Toggle  - label + on/off switch on the right. Click anywhere on the
     //           row flips it.
     enum class RowKind { Plain, Value, Toggle };
 
@@ -74,7 +74,7 @@ public:
         std::wstring         glyph;       // single grapheme drawn on the tile
         std::wstring         label;       // localised
         std::wstring         title;       // shown as the main pane title
-        theme::Color         tile_color;  // tile background (saturated SF colour)
+        theme::Color         tile_color;  // tile background (saturated)
         std::vector<Section> sections;    // content cards for this category
         ItemHandler          on_pick;     // optional hook when row is clicked
     };
@@ -257,4 +257,4 @@ private:
     mutable float built_at_footer_ {0};
 };
 
-}  // namespace mactw::ui
+}  // namespace vrtx::ui

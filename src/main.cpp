@@ -4,14 +4,14 @@
 
 namespace {
 
-// Append a line to %TEMP%\mactermwin.log. Used as a tracer of last resort
+// Append a line to %TEMP%\vrtxterm.log. Used as a tracer of last resort
 // when the app dies before any UI can show.
 void TraceLog(const char* msg) {
     wchar_t tempDir[MAX_PATH] = {};
     if (!::GetTempPathW(MAX_PATH, tempDir)) return;
 
     wchar_t path[MAX_PATH] = {};
-    std::swprintf(path, MAX_PATH, L"%smactermwin.log", tempDir);
+    std::swprintf(path, MAX_PATH, L"%svrtxterm.log", tempDir);
 
     FILE* f = nullptr;
     if (_wfopen_s(&f, path, L"a") == 0 && f) {
@@ -29,16 +29,16 @@ void ShowFatal(const char* what) {
         wide.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
     }
     ::MessageBoxW(nullptr, wide.c_str(),
-                  L"MacTermWin fatal error",
+                  L"Vrtx Term fatal error",
                   MB_ICONERROR | MB_OK | MB_TASKMODAL | MB_SETFOREGROUND);
 }
 
 }  // namespace
 
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
-    TraceLog("---- MacTermWin start ----");
+    TraceLog("---- Vrtx Term start ----");
     try {
-        mactw::app::Application app;
+        vrtx::app::Application app;
         const int rc = app.Run(hInstance);
         TraceLog("clean exit");
         return rc;

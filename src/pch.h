@@ -44,7 +44,7 @@
 #include <string_view>
 #include <vector>
 
-namespace mactw {
+namespace vrtx {
 
 // Concise alias for COM smart pointer.
 template <typename T>
@@ -60,4 +60,4 @@ inline void ThrowIfFailed(HRESULT hr, const char* what = "HRESULT") {
     }
 }
 
-}  // namespace mactw
+}  // namespace vrtx

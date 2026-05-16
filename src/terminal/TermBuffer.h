@@ -28,7 +28,7 @@
 #include <mutex>
 #include <string>
 
-namespace mactw::terminal {
+namespace vrtx::terminal {
 
 // ---- Color reference inside a cell ----------------------------------------
 
@@ -299,4 +299,4 @@ private:
     uint64_t generation_{0};
 };
 
-}  // namespace mactw::terminal
+}  // namespace vrtx::terminal

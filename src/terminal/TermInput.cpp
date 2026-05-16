@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-namespace mactw::terminal {
+namespace vrtx::terminal {
 
 namespace {
 
@@ -214,4 +214,4 @@ size_t TranslateChar(wchar_t ch, char* out, size_t cap) {
     return 4;
 }
 
-}  // namespace mactw::terminal
+}  // namespace vrtx::terminal

@@ -1,6 +1,6 @@
 #include "terminal/TerminalSession.h"
 
-namespace mactw::terminal {
+namespace vrtx::terminal {
 
 TerminalSession::TerminalSession()
     : parser_(buffer_) {
@@ -58,4 +58,4 @@ void TerminalSession::Stop() {
     pty_.Stop();
 }
 
-}  // namespace mactw::terminal
+}  // namespace vrtx::terminal

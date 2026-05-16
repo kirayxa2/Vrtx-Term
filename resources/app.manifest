@@ -3,9 +3,9 @@
   <assemblyIdentity
       version="0.1.0.0"
       processorArchitecture="*"
-      name="MacTermWin"
+      name="VrtxTerm"
       type="win32"/>
-  <description>macOS Tahoe-styled terminal for Windows.</description>
+  <description>Native terminal emulator for Windows.</description>
 
   <!-- OS compatibility: Windows 10 + Windows 11 -->
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">

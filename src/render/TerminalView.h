@@ -25,7 +25,7 @@
 #include "pch.h"
 #include "terminal/TerminalSession.h"
 
-namespace mactw::render {
+namespace vrtx::render {
 
 class TerminalView {
 public:
@@ -79,4 +79,4 @@ private:
     float pad_y_px_    {8.0f};
 };
 
-}  // namespace mactw::render
+}  // namespace vrtx::render

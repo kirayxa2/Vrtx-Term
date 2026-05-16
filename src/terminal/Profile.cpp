@@ -2,7 +2,7 @@
 
 #include <cstdio>
 
-namespace mactw::terminal {
+namespace vrtx::terminal {
 
 namespace {
 
@@ -33,53 +33,53 @@ std::wstring EnvVar(const wchar_t* name) {
 // Admin detection uses the WindowsPrincipal API which is built-in and
 // doesn't require any module load.
 constexpr const char* kProfileTemplate =
-    "# MacTermWin default PowerShell profile - regenerated on every launch.\n"
+    "# VrtxTerm default PowerShell profile - regenerated on every launch.\n"
     "# Do not hand-edit; place customisations in $PROFILE instead and we'll\n"
     "# look at exposing a 'load user profile too' option later.\n"
     "\n"
-    "$Host.UI.RawUI.WindowTitle = 'MacTermWin'\n"
+    "$Host.UI.RawUI.WindowTitle = 'VrtxTerm'\n"
     "\n"
     "# Detect once at session start; admin status doesn't change mid-session.\n"
-    "$script:MacTw_IsAdmin = $false\n"
+    "$script:VrtxTerm_IsAdmin = $false\n"
     "try {\n"
     "    $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()\n"
     "    $pr = New-Object System.Security.Principal.WindowsPrincipal($id)\n"
-    "    $script:MacTw_IsAdmin = $pr.IsInRole(\n"
+    "    $script:VrtxTerm_IsAdmin = $pr.IsInRole(\n"
     "        [System.Security.Principal.WindowsBuiltInRole]::Administrator)\n"
     "} catch { }\n"
     "\n"
-    "$script:MacTw_Host = try { [System.Net.Dns]::GetHostName() }\n"
+    "$script:VrtxTerm_Host = try { [System.Net.Dns]::GetHostName() }\n"
     "                    catch { $env:COMPUTERNAME }\n"
     "\n"
-    "# ---- macOS-style 'Last login' banner -----------------------------------\n"
-    "# Apple's Terminal prints exactly:\n"
+    "# ---- Welcome banner -----------------------------------\n"
+    "# System Terminal prints exactly:\n"
     "#   Last login: Mon Jan  6 23:06:18 on ttys001\n"
     "# day-of-month is right-padded to two columns with a SPACE when single\n"
     "# digit, not a zero. We mirror that format and remember the timestamp\n"
-    "# in %LOCALAPPDATA%\\MacTermWin\\last_login.txt so the next session can\n"
+    "# in %LOCALAPPDATA%\\VrtxTerm\\last_login.txt so the next session can\n"
     "# print our own previous login. The very first session has no prior\n"
     "# timestamp so we just skip the banner - same as a fresh mac account.\n"
-    "$script:MacTw_LlDir  = Join-Path $env:LOCALAPPDATA 'MacTermWin'\n"
-    "$script:MacTw_LlFile = Join-Path $script:MacTw_LlDir 'last_login.txt'\n"
-    "if (-not (Test-Path $script:MacTw_LlDir)) {\n"
-    "    New-Item -ItemType Directory -Path $script:MacTw_LlDir -Force | Out-Null\n"
+    "$script:VrtxTerm_LlDir  = Join-Path $env:LOCALAPPDATA 'VrtxTerm'\n"
+    "$script:VrtxTerm_LlFile = Join-Path $script:VrtxTerm_LlDir 'last_login.txt'\n"
+    "if (-not (Test-Path $script:VrtxTerm_LlDir)) {\n"
+    "    New-Item -ItemType Directory -Path $script:VrtxTerm_LlDir -Force | Out-Null\n"
     "}\n"
-    "$script:MacTw_LlInv = [System.Globalization.CultureInfo]::InvariantCulture\n"
-    "function global:Format-MacTwLoginTime([datetime]$dt) {\n"
-    "    $dow   = $dt.ToString('ddd', $script:MacTw_LlInv)\n"
-    "    $mon   = $dt.ToString('MMM', $script:MacTw_LlInv)\n"
+    "$script:VrtxTerm_LlInv = [System.Globalization.CultureInfo]::InvariantCulture\n"
+    "function global:Format-VrtxTermLoginTime([datetime]$dt) {\n"
+    "    $dow   = $dt.ToString('ddd', $script:VrtxTerm_LlInv)\n"
+    "    $mon   = $dt.ToString('MMM', $script:VrtxTerm_LlInv)\n"
     "    $day   = $dt.Day.ToString().PadLeft(2)\n"
-    "    $clock = $dt.ToString('HH:mm:ss', $script:MacTw_LlInv)\n"
+    "    $clock = $dt.ToString('HH:mm:ss', $script:VrtxTerm_LlInv)\n"
     "    \"$dow $mon $day $clock\"\n"
     "}\n"
-    "if (Test-Path $script:MacTw_LlFile) {\n"
-    "    $prev = (Get-Content -Path $script:MacTw_LlFile -Raw -ErrorAction SilentlyContinue)\n"
+    "if (Test-Path $script:VrtxTerm_LlFile) {\n"
+    "    $prev = (Get-Content -Path $script:VrtxTerm_LlFile -Raw -ErrorAction SilentlyContinue)\n"
     "    if ($prev) {\n"
     "        Write-Host (\"Last login: $($prev.Trim()) on ttys001\")\n"
     "    }\n"
     "}\n"
-    "Set-Content -Path $script:MacTw_LlFile `\n"
-    "    -Value (Format-MacTwLoginTime (Get-Date)) -NoNewline -Encoding utf8\n"
+    "Set-Content -Path $script:VrtxTerm_LlFile `\n"
+    "    -Value (Format-VrtxTermLoginTime (Get-Date)) -NoNewline -Encoding utf8\n"
     "\n"
     "function global:prompt {\n"
     "    $e    = [char]27\n"
@@ -90,14 +90,14 @@ constexpr const char* kProfileTemplate =
     "    $rst  = \"$e[0m\"\n"
     "\n"
     "    $u = $env:USERNAME\n"
-    "    $h = $script:MacTw_Host\n"
+    "    $h = $script:VrtxTerm_Host\n"
     "    $p = (Get-Location).Path\n"
     "    # Replace $HOME with ~ for a tighter prompt; fall back to literal\n"
     "    # path if $HOME isn't set (rare, but happens in service contexts).\n"
     "    if ($env:HOME) { $p = $p -replace [regex]::Escape($env:HOME), '~' }\n"
     "    elseif ($env:USERPROFILE) { $p = $p -replace [regex]::Escape($env:USERPROFILE), '~' }\n"
     "\n"
-    "    $sigil = if ($script:MacTw_IsAdmin) { \"$red#$rst\" } else { '$' }\n"
+    "    $sigil = if ($script:VrtxTerm_IsAdmin) { \"$red#$rst\" } else { '$' }\n"
     "\n"
     "    \"$cyan\u256d\u2500$rst$grn$u@$h$rst  $blu$p$rst`n$cyan\u2570\u2500$rst$sigil \"\n"
     "}\n";
@@ -134,7 +134,7 @@ std::wstring EnsureDefaultPwshProfile() {
     std::wstring base = EnvVar(L"LOCALAPPDATA");
     if (base.empty()) return L"";
 
-    const std::wstring dir = base + L"\\MacTermWin";
+    const std::wstring dir = base + L"\\VrtxTerm";
     if (!EnsureDirectoryExists(dir)) return L"";
 
     const std::wstring path = dir + L"\\profile.ps1";
@@ -148,4 +148,4 @@ std::wstring EnsureDefaultPwshProfile() {
     return path;
 }
 
-}  // namespace mactw::terminal
+}  // namespace vrtx::terminal

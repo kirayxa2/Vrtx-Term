@@ -1,9 +1,9 @@
 #include "render/TerminalView.h"
 
 #include "render/BoxDrawing.h"
-#include "theme/TahoeTheme.h"
+#include "theme/AppTheme.h"
 
-namespace mactw::render {
+namespace vrtx::render {
 
 namespace {
 
@@ -274,7 +274,7 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
         buf.GetViewportRow(r, cells.data() + static_cast<size_t>(r) * cols);
     }
 
-    // Selection highlight colour. Apple uses a translucent accent; we
+    // Selection highlight colour. We use a translucent accent; we
     // pre-multiply because the swap chain is premul-alpha.
     const D2D1_COLOR_F selBg = D2D1::ColorF(0.27f, 0.42f, 0.83f, 0.85f);
     const D2D1_COLOR_F selFg = D2D1::ColorF(1.0f,  1.0f,  1.0f,  1.0f);
@@ -492,4 +492,4 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
     }
 }
 
-}  // namespace mactw::render
+}  // namespace vrtx::render

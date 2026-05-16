@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-namespace mactw::terminal {
+namespace vrtx::terminal {
 
 namespace {
 
@@ -513,4 +513,4 @@ void VtParser::HandleSgr() {
     }
 }
 
-}  // namespace mactw::terminal
+}  // namespace vrtx::terminal

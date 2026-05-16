@@ -1,6 +1,6 @@
 #include "ui/AppAlert.h"
 
-namespace mactw::ui {
+namespace vrtx::ui {
 
 namespace {
 
@@ -170,7 +170,7 @@ void AppAlert::Render(ID2D1DeviceContext* dc,
     // ---- Scrim --------------------------------------------------------
     //
     // Dim the entire content area (caption strip excluded so traffic
-    // lights stay visible). Apple's alerts darken everything below the
+    // lights stay visible). System alerts typically darken everything below the
     // titlebar - same here.
     {
         const D2D1_RECT_F scrim{
@@ -308,4 +308,4 @@ void AppAlert::Render(ID2D1DeviceContext* dc,
     dc->SetTransform(prev);
 }
 
-}  // namespace mactw::ui
+}  // namespace vrtx::ui

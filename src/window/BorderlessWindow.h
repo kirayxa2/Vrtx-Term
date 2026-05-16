@@ -33,7 +33,7 @@
 #include "ui/SettingsView.h"
 #include "ui/TrafficLights.h"
 
-namespace mactw::window {
+namespace vrtx::window {
 
 class BorderlessWindow {
 public:
@@ -165,4 +165,4 @@ private:
     void RelayoutSettings();
 };
 
-}  // namespace mactw::window
+}  // namespace vrtx::window

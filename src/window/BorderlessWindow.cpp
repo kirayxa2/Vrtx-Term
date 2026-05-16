@@ -1,14 +1,14 @@
 #include "window/BorderlessWindow.h"
 
 #include "terminal/TermInput.h"
-#include "theme/TahoeTheme.h"
+#include "theme/AppTheme.h"
 #include "window/SquircleGeometry.h"
 
-namespace mactw::window {
+namespace vrtx::window {
 
 namespace {
 
-constexpr wchar_t kClassName[] = L"MacTermWin.BorderlessWindow";
+constexpr wchar_t kClassName[] = L"VrtxTerm.BorderlessWindow";
 
 // Custom message we post from the pty reader thread to nudge the UI to
 // repaint. WM_APP is the documented base for app-private messages.
@@ -46,7 +46,7 @@ void Trace(const char* msg) {
     wchar_t tempDir[MAX_PATH] = {};
     if (!::GetTempPathW(MAX_PATH, tempDir)) return;
     wchar_t path[MAX_PATH] = {};
-    std::swprintf(path, MAX_PATH, L"%smactermwin.log", tempDir);
+    std::swprintf(path, MAX_PATH, L"%svrtxterm.log", tempDir);
     FILE* f = nullptr;
     if (_wfopen_s(&f, path, L"a") == 0 && f) {
         std::fprintf(f, "  win: %s\n", msg);
@@ -382,7 +382,7 @@ void BorderlessWindow::ToggleMenu() {
     StartMenuAnimation(caption_menu_.IsOpen() ? 0.0f : 1.0f);
     if (caption_menu_.IsOpen()) {
         // Closing: keep IsOpen=true through the fade-out; the timer
-        // flips it to false at the end. This matches how Apple keeps
+        // flips it to false at the end. This matches how stock Settings keeps
         // the panel hit-testable until it's fully gone.
     } else {
         // Opening: relayout *now* so the panel is anchored to the
@@ -653,7 +653,7 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
     if (app_alert_.IsOpen()) {
         // Alert is modal: the scrim catches every click below the
         // caption strip. Keep the strip itself draggable (the user can
-        // still move the window with a dialog up, like macOS sheets).
+        // still move the window with a dialog up, like a modal sheet).
         if (wy >= captionHpx) return HTCLIENT;
     }
     if (wy < captionHpx) {
@@ -692,7 +692,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             break;
         }
 
-        // SetCursor: when the mouse is over content, swap to IBEAM. Apple
+        // SetCursor: when the mouse is over content, swap to IBEAM. The native
         // and every other terminal show the text-insert cursor in the
         // grid area. For traffic lights / caption / borders, fall back
         // to DefWindowProc which uses the class cursor (IDC_ARROW).
@@ -771,7 +771,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
             // Enter / Space commits the alert (acts as the primary
             // button click). Mirrors the keyboard contract of every
-            // native macOS alert and Win32 MessageBox.
+            // native dialog and Win32 MessageBox.
             if (app_alert_.IsOpen() && !app_alert_.IsClosing() &&
                 (wp == VK_RETURN || wp == VK_SPACE)) {
                 DismissAlert();
@@ -797,7 +797,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 if (CopySelectionToClipboard()) {
                     auto& buf = session_->Buffer();
                     std::lock_guard<std::mutex> lk(buf.Lock());
-                    // Apple keeps the selection visible after Cmd-C; we do
+                    // System Terminal keeps the selection visible after Ctrl-Shift-C; we do
                     // the same so the user can re-copy. They can dismiss
                     // it with a click anywhere.
                     return 0;
@@ -939,7 +939,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
             // Modal app alert: clicks inside the panel route to the
             // alert; clicks on the scrim stay swallowed (no dismiss on
-            // outside-click, mirroring native macOS modal alerts).
+            // outside-click, mirroring stock modal alerts).
             if (app_alert_.IsOpen() && !app_alert_.IsClosing()) {
                 if (app_alert_.HitTestPanel(wx, wy)) {
                     app_alert_.OnLButtonDown(wx, wy);
@@ -950,7 +950,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
             // Modal Settings sheet: clicks on sidebar rows or the Done
             // pill go to the view; clicks on the traffic lights still
-            // work (Apple keeps them live in System Settings too); any
+            // work (stock System Settings keeps them live too); any
             // other click is swallowed silently - the sheet has
             // REPLACED the terminal so there's nothing to click into.
             if (settings_.IsOpen() && !settings_.IsClosing()) {
@@ -967,7 +967,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             // Caption menu is modal-ish: if it's showing, all click-down
             // routes through it first. A click on the menu rows arms the
             // pressed-state; a click outside both the menu and the button
-            // dismisses the menu without triggering anything else (Apple
+            // dismisses the menu without triggering anything else (stock
             // does the same on light-dismiss).
             if (caption_menu_.IsOpen()) {
                 if (caption_menu_.HitTest(wx, wy)) {
@@ -1156,4 +1156,4 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
     return ::DefWindowProcW(hwnd_, msg, wp, lp);
 }
 
-}  // namespace mactw::window
+}  // namespace vrtx::window

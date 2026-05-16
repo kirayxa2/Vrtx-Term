@@ -1,6 +1,6 @@
-#include "theme/TahoeTheme.h"
+#include "theme/AppTheme.h"
 
-namespace mactw::theme {
+namespace vrtx::theme {
 
 const Palette& ActivePalette() {
     // MVP ships dark only. When the settings UI arrives this will switch on a
@@ -8,4 +8,4 @@ const Palette& ActivePalette() {
     return kDarkPalette;
 }
 
-}  // namespace mactw::theme
+}  // namespace vrtx::theme

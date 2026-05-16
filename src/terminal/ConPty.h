@@ -30,7 +30,7 @@
 #include <functional>
 #include <thread>
 
-namespace mactw::terminal {
+namespace vrtx::terminal {
 
 using OnPtyOutputFn = std::function<void(const char* data, size_t len)>;
 using OnPtyExitFn   = std::function<void(uint32_t exitCode)>;
@@ -102,4 +102,4 @@ private:
     std::wstring  shell_path_;
 };
 
-}  // namespace mactw::terminal
+}  // namespace vrtx::terminal

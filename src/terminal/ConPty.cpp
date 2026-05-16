@@ -4,7 +4,7 @@
 
 #include <cstdio>
 
-namespace mactw::terminal {
+namespace vrtx::terminal {
 
 namespace {
 
@@ -297,4 +297,4 @@ void ConPty::CleanupHandles() {
     if (thread_h_)  { ::CloseHandle(thread_h_);  thread_h_  = nullptr; }
 }
 
-}  // namespace mactw::terminal
+}  // namespace vrtx::terminal

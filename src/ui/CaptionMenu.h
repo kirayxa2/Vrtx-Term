@@ -1,24 +1,23 @@
-// Liquid Glass dropdown menu that grows out of the caption button.
+// translucent dropdown menu that grows out of the caption button.
 //
-// Visual recipe (matches the right-side toolbar dropdowns shipped in the
-// stock macOS Tahoe apps - Mail, Notes, Settings):
+// Visual recipe — a toolbar-style dropdown:
 //
 //   - Squircle base shape, corner radius matches the host window so the
 //     menu reads as part of the same chrome family.
 //   - Translucent dark fill (`captionMenuFill`) with NO top highlight
-//     band - the WWDC25 reference shows a perfectly even surface; the
+//     band - we want a perfectly even surface; the
 //     "glass" feeling comes from the fill being semi-translucent and
 //     the soft drop shadow underneath, not from a baked-in light strip.
 //   - Soft drop shadow under the panel (offset 8pt, blur 20pt, alpha 30%)
 //     so it floats above the terminal contents.
-//   - No visible outline. Apple does not draw a hairline around toolbar
+//   - No visible outline. We do not draw a hairline around toolbar
 //     popovers; the panel reads as a free-floating piece of glass.
 //
 // Animation:
 //
 //   The window drives a unit-interval `progress_` from 0 (fully closed) to
 //   1 (fully open) over `kCaptionMenuAnimDurationMs`, easing it through
-//   an Apple-style cubic-out curve. `Render()` interprets `progress_` as
+//   a cubic-out curve. `Render()` interprets `progress_` as
 //   a per-frame transform:
 //
 //     scaleY    = 0.85 + 0.15 * progress             (subtle vertical grow)
@@ -46,9 +45,9 @@
 #pragma once
 
 #include "pch.h"
-#include "theme/TahoeTheme.h"
+#include "theme/AppTheme.h"
 
-namespace mactw::ui {
+namespace vrtx::ui {
 
 class CaptionMenu {
 public:
@@ -136,4 +135,4 @@ private:
     mutable float                     fmt_built_at_icon_size_{0};
 };
 
-}  // namespace mactw::ui
+}  // namespace vrtx::ui

@@ -1,9 +1,9 @@
 #include "render/Renderer.h"
 
-#include "theme/TahoeTheme.h"
+#include "theme/AppTheme.h"
 #include "window/SquircleGeometry.h"
 
-namespace mactw::render {
+namespace vrtx::render {
 
 namespace {
 
@@ -226,7 +226,7 @@ void Renderer::Render(bool windowActive,
 
     // ---- Drop shadow pass -------------------------------------------------
     //
-    // Mirrors the macOS Tahoe SVG `filter: drop-shadow(0 5pt 15pt rgba(0,0,0,0.30))`:
+    // Mirrors the Vrtx Term SVG `filter: drop-shadow(0 5pt 15pt rgba(0,0,0,0.30))`:
     //
     //   1. Record an opaque-shape command list that fills the squircle with
     //      pre-multiplied rgba(0,0,0, kShadowAlpha) at offset (margin,
@@ -329,14 +329,14 @@ void Renderer::Render(bool windowActive,
     // ---- Settings sheet -------------------------------------------------
     //
     // Drawn BEFORE traffic-lights so the lights end up optically on top
-    // of the sidebar pill - exactly the macOS System Settings stacking.
+    // of the sidebar pill - exactly the stacking we want.
     settings.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
                     dwrite_factory_.Get());
 
     // ---- Traffic lights -------------------------------------------------
     //
     // Always rendered last so they sit on top of the settings sidebar
-    // pill (Tahoe System Settings stacking).
+    // pill (the Settings sheet stacking).
     trafficLights.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
                          windowActive);
 
@@ -390,4 +390,4 @@ void Renderer::Render(bool windowActive,
     dcomp_device_->Commit();
 }
 
-}  // namespace mactw::render
+}  // namespace vrtx::render

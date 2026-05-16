@@ -1,6 +1,6 @@
 #include "ui/CaptionMenu.h"
 
-namespace mactw::ui {
+namespace vrtx::ui {
 
 namespace {
 
@@ -8,9 +8,9 @@ inline D2D1::ColorF ToD2D(theme::Color c) {
     return D2D1::ColorF(c.r, c.g, c.b, c.a);
 }
 
-// Apple-style cubic-out easing. Output ramps quickly at the start and
+// Cubic-out easing. Output ramps quickly at the start and
 // settles smoothly into 1, which produces the "soft landing" feel used
-// across macOS Tahoe popovers.
+// across native popovers.
 float EaseOutCubic(float t) {
     const float u = 1.0f - t;
     return 1.0f - u * u * u;
@@ -130,7 +130,7 @@ void CaptionMenu::Render(ID2D1DeviceContext* dc,
     const float progress01 = std::clamp(progress_, 0.0f, 1.0f);
     const float ease = EaseOutCubic(progress01);
 
-    // Animate height + opacity. We keep the width fixed (Tahoe popovers
+    // Animate height + opacity. We keep the width fixed (popovers
     // reveal vertically only) and only shrink-from-top by 15% so the
     // motion is subtle - more like a fade than a bloom.
     const float fullW = bounds_.right - bounds_.left;
@@ -149,7 +149,7 @@ void CaptionMenu::Render(ID2D1DeviceContext* dc,
     //
     // Three offset rounded rects with decreasing alpha. Cheaper than a
     // real Gaussian blur per frame and indistinguishable from one at this
-    // scale. Apple uses a softer y=8pt blur=20pt under toolbar popovers.
+    // scale. We use a softer y=8pt blur=20pt under our toolbar popovers.
     {
         struct Halo { float dx; float dy; float spread; float alpha; };
         const Halo halos[] = {
@@ -171,9 +171,9 @@ void CaptionMenu::Render(ID2D1DeviceContext* dc,
         }
     }
 
-    // ---- Panel base fill (Liquid Glass body) ---------------------------
+    // ---- Panel base fill (panel body) ---------------------------
     //
-    // Pure flat fill. No top-highlight strip - that was wrong. Tahoe
+    // Pure flat fill. No top-highlight strip - the popovers
     // popovers read as a single semi-translucent slab, the depth comes
     // from the shadow underneath.
     {
@@ -289,4 +289,4 @@ void CaptionMenu::Render(ID2D1DeviceContext* dc,
     }
 }
 
-}  // namespace mactw::ui
+}  // namespace vrtx::ui

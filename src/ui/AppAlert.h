@@ -1,6 +1,6 @@
 // In-window alert dialog rendered through D2D - replaces MessageBoxW.
 //
-// macOS Tahoe shows alerts as a Liquid Glass "sheet" that fades in over
+// Vrtx Term shows alerts as an in-window "sheet" that fades in over
 // the host window with a dim scrim covering the content. We do the same
 // here so the alerts feel like a continuation of the chrome we already
 // drew (same fonts, same shadows, same easing) rather than a foreign
@@ -27,9 +27,9 @@
 #pragma once
 
 #include "pch.h"
-#include "theme/TahoeTheme.h"
+#include "theme/AppTheme.h"
 
-namespace mactw::ui {
+namespace vrtx::ui {
 
 class AppAlert {
 public:
@@ -125,4 +125,4 @@ private:
     mutable float built_at_btn_  {0};
 };
 
-}  // namespace mactw::ui
+}  // namespace vrtx::ui

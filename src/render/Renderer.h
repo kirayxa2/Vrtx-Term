@@ -37,7 +37,7 @@
 #include "ui/SettingsView.h"
 #include "ui/TrafficLights.h"
 
-namespace mactw::render {
+namespace vrtx::render {
 
 class Renderer {
 public:
@@ -114,4 +114,4 @@ private:
     terminal::TerminalSession* session_{nullptr};
 };
 
-}  // namespace mactw::render
+}  // namespace vrtx::render

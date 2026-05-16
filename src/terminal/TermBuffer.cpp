@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace mactw::terminal {
+namespace vrtx::terminal {
 
 namespace {
 
@@ -552,4 +552,4 @@ std::string TermBuffer::SelectionText() const {
     return out;
 }
 
-}  // namespace mactw::terminal
+}  // namespace vrtx::terminal

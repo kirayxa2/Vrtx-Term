@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-project(MacTermWin
+project(VrtxTerm
     VERSION 0.1.0
-    DESCRIPTION "macOS Tahoe-styled terminal for Windows"
+    DESCRIPTION "Native terminal emulator for Windows"
     LANGUAGES CXX)
 
 # ---- Global settings -------------------------------------------------------
@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(NOT WIN32)
     message(FATAL_ERROR
-        "MacTermWin is a Windows-only application. "
+        "VrtxTerm is a Windows-only application. "
         "Configure on Windows with Visual Studio 2022 or Build Tools.")
 endif()
 
@@ -46,7 +46,7 @@ endif()
 
 # ---- Sources ---------------------------------------------------------------
 
-set(MACTERMWIN_SOURCES
+set(VRTXTERM_SOURCES
     src/main.cpp
 
     src/app/Application.cpp
@@ -72,10 +72,10 @@ set(MACTERMWIN_SOURCES
     src/ui/AppAlert.cpp
     src/ui/SettingsView.cpp
 
-    src/theme/TahoeTheme.cpp
+    src/theme/AppTheme.cpp
 )
 
-set(MACTERMWIN_HEADERS
+set(VRTXTERM_HEADERS
     src/pch.h
 
     src/app/Application.h
@@ -101,30 +101,30 @@ set(MACTERMWIN_HEADERS
     src/ui/AppAlert.h
     src/ui/SettingsView.h
 
-    src/theme/TahoeTheme.h
+    src/theme/AppTheme.h
 )
 
-set(MACTERMWIN_RESOURCES
+set(VRTXTERM_RESOURCES
     resources/app.rc
 )
 
 # ---- Target ----------------------------------------------------------------
 
-add_executable(MacTermWin WIN32
-    ${MACTERMWIN_SOURCES}
-    ${MACTERMWIN_HEADERS}
-    ${MACTERMWIN_RESOURCES}
+add_executable(VrtxTerm WIN32
+    ${VRTXTERM_SOURCES}
+    ${VRTXTERM_HEADERS}
+    ${VRTXTERM_RESOURCES}
 )
 
-target_include_directories(MacTermWin PRIVATE
+target_include_directories(VrtxTerm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_precompile_headers(MacTermWin PRIVATE
+target_precompile_headers(VrtxTerm PRIVATE
     src/pch.h
 )
 
-target_link_libraries(MacTermWin PRIVATE
+target_link_libraries(VrtxTerm PRIVATE
     d2d1
     d3d11
     dxgi
@@ -143,16 +143,16 @@ target_link_libraries(MacTermWin PRIVATE
 # the resource compiler errors out with CVT1100 ("duplicate resource") on the
 # RT_MANIFEST entry.
 if(MSVC)
-    target_link_options(MacTermWin PRIVATE "/MANIFEST:NO")
+    target_link_options(VrtxTerm PRIVATE "/MANIFEST:NO")
 endif()
 
-set_target_properties(MacTermWin PROPERTIES
-    OUTPUT_NAME "MacTermWin"
+set_target_properties(VrtxTerm PROPERTIES
+    OUTPUT_NAME "VrtxTerm"
     VS_DPI_AWARE "PerMonitor"
 )
 
 # Copy artifacts to a stable bin/ folder for convenience
-set_target_properties(MacTermWin PROPERTIES
+set_target_properties(VrtxTerm PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY         "${CMAKE_BINARY_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_BINARY_DIR}/bin"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"

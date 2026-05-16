@@ -1,6 +1,6 @@
 #include "ui/CaptionButton.h"
 
-namespace mactw::ui {
+namespace vrtx::ui {
 
 namespace {
 
@@ -116,7 +116,7 @@ void CaptionButton::Render(ID2D1DeviceContext* dc,
 
     // ---- Chevron-down glyph (rotates 180deg as expansion -> 1) ---------
     //
-    // Apple's SF Symbol "chevron.down" inside a 28pt button uses a flat,
+    // A 28pt round button with a chevron-down glyph reads best with a flat,
     // wide V (1.8:1). We draw it as a single polyline so the apex uses
     // the path's lineJoin (round) instead of two overlapping round caps,
     // and rotate it about the disc centre by 180deg * expansion.
@@ -168,4 +168,4 @@ void CaptionButton::Render(ID2D1DeviceContext* dc,
     }
 }
 
-}  // namespace mactw::ui
+}  // namespace vrtx::ui

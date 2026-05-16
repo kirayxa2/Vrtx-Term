@@ -27,7 +27,7 @@
 #include "terminal/TermBuffer.h"
 #include "terminal/VtParser.h"
 
-namespace mactw::terminal {
+namespace vrtx::terminal {
 
 using ScheduleRepaintFn = std::function<void()>;
 
@@ -69,4 +69,4 @@ private:
     ScheduleRepaintFn repaint_;
 };
 
-}  // namespace mactw::terminal
+}  // namespace vrtx::terminal

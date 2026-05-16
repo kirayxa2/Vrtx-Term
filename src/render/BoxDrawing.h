@@ -29,7 +29,7 @@
 
 #include "pch.h"
 
-namespace mactw::render::box {
+namespace vrtx::render::box {
 
 // Returns true for codepoints we render ourselves.
 bool IsBoxDrawing(char32_t cp);
@@ -49,4 +49,4 @@ bool DrawGlyph(ID2D1DeviceContext* dc,
                float     lightPx,
                float     heavyPx);
 
-}  // namespace mactw::render::box
+}  // namespace vrtx::render::box

@@ -1,6 +1,6 @@
 #include "window/GlassEffect.h"
 
-namespace mactw::window {
+namespace vrtx::window {
 
 namespace {
 
@@ -86,4 +86,4 @@ void RemoveBackdrop(HWND hwnd) {
     fn(hwnd, &data);
 }
 
-}  // namespace mactw::window
+}  // namespace vrtx::window

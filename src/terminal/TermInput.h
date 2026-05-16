@@ -20,7 +20,7 @@
 
 #include "pch.h"
 
-namespace mactw::terminal {
+namespace vrtx::terminal {
 
 namespace mod {
 inline constexpr uint8_t kShift = 1u << 0;
@@ -42,4 +42,4 @@ size_t TranslateVirtualKey(WPARAM vk, uint8_t mods, char* out, size_t cap);
 // thread-local; this matches how Windows delivers astral planes.
 size_t TranslateChar(wchar_t ch, char* out, size_t cap);
 
-}  // namespace mactw::terminal
+}  // namespace vrtx::terminal

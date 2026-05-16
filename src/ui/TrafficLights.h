@@ -1,4 +1,4 @@
-// macOS-style "traffic light" buttons: close, minimize, maximize.
+// Round "traffic light" buttons: close, minimize, maximize.
 //
 // The control owns its hit-testing and rendering. It exposes:
 //   * UpdateLayoutDIPs(): receive its physical placement from the layout pass.
@@ -8,7 +8,7 @@
 //     called from the window proc.
 //   * Render(): paints the three discs and the hover glyphs.
 //
-// Behaviour mirrors macOS:
+// Behaviour:
 //   - All three are dimmed when the window is inactive.
 //   - On hover anywhere over the group, the close/min/max glyphs appear inside
 //     each disc.
@@ -18,9 +18,9 @@
 #pragma once
 
 #include "pch.h"
-#include "theme/TahoeTheme.h"
+#include "theme/AppTheme.h"
 
-namespace mactw::ui {
+namespace vrtx::ui {
 
 enum class TrafficAction {
     None,
@@ -96,4 +96,4 @@ private:
     TrafficAction pressed_{TrafficAction::None};
 };
 
-}  // namespace mactw::ui
+}  // namespace vrtx::ui

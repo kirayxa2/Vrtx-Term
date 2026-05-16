@@ -1,8 +1,8 @@
-// Apple Tahoe-style "more" / "dropdown" button in the top-right of the
+// Native-style "more" / "dropdown" button in the top-right of the
 // caption strip.
 //
-// Visually this is a circular Liquid Glass disc, ~28pt across, that holds
-// an SF-Symbols-style chevron-down glyph. The fill is always visible
+// Visually this is a circular translucent disc, ~28pt across, that holds
+// a chevron-down glyph. The fill is always visible
 // (faint dark wash + 1pt hairline outline matching the window border);
 // hover and press add a translucent overlay on top.
 //
@@ -17,9 +17,9 @@
 #pragma once
 
 #include "pch.h"
-#include "theme/TahoeTheme.h"
+#include "theme/AppTheme.h"
 
-namespace mactw::ui {
+namespace vrtx::ui {
 
 class CaptionButton {
 public:
@@ -74,4 +74,4 @@ private:
     ClickHandler on_click_;
 };
 
-}  // namespace mactw::ui
+}  // namespace vrtx::ui

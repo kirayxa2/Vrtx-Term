@@ -1,4 +1,4 @@
-# Git workflow for MacTermWin
+# Git workflow for VrtxTerm
 
 ## Rules
 
