@@ -51,6 +51,14 @@ public:
     void Render(ID2D1DeviceContext* dc, ID2D1SolidColorBrush* brush,
                 ID2D1Factory* factory, bool windowActive) const;
 
+    // Apply an additional horizontal shift to the disc row, in physical
+    // pixels. Used when the Settings sheet is open: the sidebar pill
+    // begins close to the squircle's left edge with a 16pt rounded
+    // corner, so the lights need a couple of px to clear the corner
+    // and not look glued to it. Pass 0 to restore the default
+    // placement.
+    void SetXShift(float pxOffset);
+
     // Bounding rect of the entire group, used by the caption-strip hit-tester
     // to exclude these pixels from drag.
     D2D1_RECT_F GroupBounds() const { return group_bounds_; }
@@ -71,6 +79,17 @@ private:
 
     std::array<Disc, 3> discs_{};
     D2D1_RECT_F         group_bounds_{};
+
+    // Latest DPI from UpdateLayout(); cached so SetXShift() can re-run
+    // the layout against the same DPI without the host having to pass
+    // it again.
+    UINT  layout_dpi_{96};
+
+    // Extra horizontal offset added to the disc row's base X (physical
+    // pixels). Persists across UpdateLayout() calls so the host doesn't
+    // have to re-apply it after every resize / DPI change. Reset
+    // explicitly via SetXShift(0.0f).
+    float x_shift_px_{0.0f};
 
     bool          group_hovered_{false};
     TrafficAction pressed_{TrafficAction::None};

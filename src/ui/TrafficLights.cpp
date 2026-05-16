@@ -19,10 +19,12 @@ inline float Distance(D2D1_POINT_2F a, D2D1_POINT_2F b) {
 void TrafficLights::UpdateLayout(UINT dpi) {
     using namespace theme;
 
+    layout_dpi_ = dpi;
+
     const float diameter = ToPx(kTrafficLightDiameter, dpi);
     const float radius   = diameter * 0.5f;
     const float spacing  = ToPx(kTrafficLightSpacing,  dpi);
-    const float insetX   = ToPx(kTrafficLightInsetX,   dpi);
+    const float insetX   = ToPx(kTrafficLightInsetX,   dpi) + x_shift_px_;
     const float captionH = ToPx(kCaptionHeight,        dpi);
 
     // Vertically centre the disc row inside the caption strip.
@@ -65,6 +67,14 @@ bool TrafficLights::ContainsAnyDisc(int x, int y) const {
         }
     }
     return false;
+}
+
+void TrafficLights::SetXShift(float pxOffset) {
+    if (std::abs(x_shift_px_ - pxOffset) < 0.5f) return;
+    x_shift_px_ = pxOffset;
+    // Re-layout against the cached DPI; UpdateLayout() reads x_shift_px_
+    // when computing insetX, so this picks up the new offset.
+    UpdateLayout(layout_dpi_);
 }
 
 const TrafficLights::Disc* TrafficLights::DiscAt(int x, int y) const {

@@ -215,6 +215,13 @@ void BorderlessWindow::OnDpiChanged(UINT newDpi, const RECT* suggested) {
     }
     renderer_.SetDpi(dpi_);
     traffic_.UpdateLayout(dpi_);
+    // If Settings is open, the disc row needs to be re-shifted at the
+    // new DPI so the offset stays at the right number of logical pt.
+    if (settings_.IsOpen()) {
+        traffic_.SetXShift(theme::ToPx(theme::kSettingsTrafficShiftX, dpi_));
+    } else {
+        traffic_.SetXShift(0.0f);
+    }
     {
         RECT rc{};
         ::GetClientRect(hwnd_, &rc);
@@ -246,6 +253,10 @@ void BorderlessWindow::RelayoutSettings() {
 
 void BorderlessWindow::ShowSettings() {
     settings_.Show();
+    // Slide the traffic-lights to the right so they sit on the
+    // sidebar pill clear of its rounded top-left corner. Without this
+    // the close-disc visually intersects the corner curvature.
+    traffic_.SetXShift(theme::ToPx(theme::kSettingsTrafficShiftX, dpi_));
     RelayoutSettings();
     StartSettingsAnimation(1.0f);
     ::InvalidateRect(hwnd_, nullptr, FALSE);
@@ -253,6 +264,8 @@ void BorderlessWindow::ShowSettings() {
 
 void BorderlessWindow::HideSettings() {
     settings_.RequestClose();
+    // Restore default placement (anchored at squircle.left + 11pt).
+    traffic_.SetXShift(0.0f);
     StartSettingsAnimation(0.0f);
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }

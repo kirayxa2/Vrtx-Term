@@ -178,7 +178,18 @@ inline constexpr float kSettingsSidebarWidth      = 200.0f;
 inline constexpr float kSettingsOuterPaddingLeft  =  8.0f;   // squircle left -> sidebar left
 inline constexpr float kSettingsOuterPaddingRight = 12.0f;   // squircle right -> content right
 inline constexpr float kSettingsOuterPaddingTop   =  6.0f;   // squircle top -> sidebar top
-inline constexpr float kSettingsOuterPaddingBot   = 12.0f;
+inline constexpr float kSettingsOuterPaddingBot   =  6.0f;   // squircle bottom -> sidebar bottom (symmetric with top)
+
+// Extra horizontal shift applied to the traffic-lights when the
+// Settings sheet is open, so they sit clear of the sidebar pill's
+// rounded top-left corner. Without this they overlap the visual
+// curvature of the corner and read as "stuck" on it.
+//
+// Value is the number of logical pt the disc row slides to the right
+// past its normal kTrafficLightInsetX. 12pt lands the close disc just
+// outside the pill's 16pt corner curve when the pill starts at
+// kSettingsOuterPaddingLeft (8pt).
+inline constexpr float kSettingsTrafficShiftX     = 12.0f;
 inline constexpr float kSettingsSidebarGap        = 12.0f;   // sidebar pill -> content
 inline constexpr float kSettingsSidebarRadius     = kWindowCornerRadius; // 16pt - matches window
 inline constexpr float kSettingsRowHeight         = 32.0f;
