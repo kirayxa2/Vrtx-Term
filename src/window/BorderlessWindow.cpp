@@ -130,7 +130,7 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
         RECT rc{};
         ::GetClientRect(hwnd, &rc);
         const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
-        const int sqW = std::max(1, (rc.right - rc.left) - 2 * marginPx);
+        const int sqW = std::max(1, static_cast<int>(rc.right - rc.left) - 2 * marginPx);
         caption_button_.UpdateLayout(sqW, dpi_);
     }
     Trace("caption-button layout done");
@@ -185,7 +185,7 @@ void BorderlessWindow::OnDpiChanged(UINT newDpi, const RECT* suggested) {
         RECT rc{};
         ::GetClientRect(hwnd_, &rc);
         const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
-        const int sqW = std::max(1, (rc.right - rc.left) - 2 * marginPx);
+        const int sqW = std::max(1, static_cast<int>(rc.right - rc.left) - 2 * marginPx);
         caption_button_.UpdateLayout(sqW, dpi_);
     }
     ::InvalidateRect(hwnd_, nullptr, FALSE);
