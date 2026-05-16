@@ -81,8 +81,8 @@ inline constexpr float kTrafficLightInsetX   = 11.0f;
 //
 // Width == Height == diameter. The right inset mirrors
 // `kTrafficLightInsetX` so the chrome reads as left-right symmetric.
-inline constexpr float kCaptionButtonDiameter = 22.0f;
-inline constexpr float kCaptionButtonInsetX   = 11.0f;
+inline constexpr float kCaptionButtonDiameter = 26.0f;
+inline constexpr float kCaptionButtonInsetX   = 8.0f;
 
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
