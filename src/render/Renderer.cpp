@@ -85,6 +85,11 @@ void Renderer::Initialize(HWND hwnd) {
     // Initialise the terminal grid renderer with our DWrite factory.
     terminal_view_.Initialize(dwrite_factory_.Get(), dpi_);
 
+    // Build the noise tile / brush once. Soft-fails if the bitmap can't
+    // be created on this device - the rest of the renderer still works,
+    // we just lose the frosted grain.
+    EnsureNoiseBrush();
+
     ThrowIfFailed(dcomp_target_->SetRoot(dcomp_visual_.Get()),
                   "IDCompositionTarget::SetRoot");
     ThrowIfFailed(dcomp_device_->Commit(), "IDCompositionDevice::Commit");
@@ -190,6 +195,55 @@ void Renderer::Resize(UINT widthPx, UINT heightPx) {
     RecreateBackBufferTarget();
 }
 
+void Renderer::EnsureNoiseBrush() {
+    if (noise_brush_ || !d2d_dc_) return;
+
+    // Build a 128x128 BGRA bitmap filled with deterministic monochrome
+    // noise using a tiny xorshift PRNG. The same seed is used every
+    // launch so the grain is reproducible (helpful when comparing
+    // screenshots). Each pixel uses pre-multiplied alpha; we keep alpha
+    // at 255 here and modulate the visible strength via SetOpacity()
+    // when drawing the brush, so the pixel data is reusable for both
+    // the surface and chrome passes.
+    constexpr UINT kSize = static_cast<UINT>(theme::kNoiseTileSize);
+    std::vector<uint32_t> pixels(kSize * kSize);
+
+    uint32_t seed = 0xDEADBEEF;
+    for (auto& px : pixels) {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        const uint8_t v = static_cast<uint8_t>(seed & 0xFFu);
+        // BGRA premul: rgb = v at alpha 255 -> already premul.
+        px = (255u << 24) | (v << 16) | (v << 8) | v;
+    }
+
+    D2D1_BITMAP_PROPERTIES props{};
+    props.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                                          D2D1_ALPHA_MODE_PREMULTIPLIED);
+    props.dpiX = 96.0f;
+    props.dpiY = 96.0f;
+
+    HRESULT hr = d2d_dc_->CreateBitmap(
+        D2D1::SizeU(kSize, kSize),
+        pixels.data(),
+        kSize * 4u,
+        props,
+        noise_bitmap_.GetAddressOf());
+    if (FAILED(hr)) return;  // Noise is best-effort; soft-fail.
+
+    D2D1_BITMAP_BRUSH_PROPERTIES bbp{};
+    bbp.extendModeX       = D2D1_EXTEND_MODE_WRAP;
+    bbp.extendModeY       = D2D1_EXTEND_MODE_WRAP;
+    bbp.interpolationMode = D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR;
+
+    hr = d2d_dc_->CreateBitmapBrush(noise_bitmap_.Get(), bbp,
+                                    noise_brush_.GetAddressOf());
+    if (FAILED(hr)) {
+        noise_bitmap_.Reset();
+    }
+}
+
 void Renderer::Render(bool windowActive,
                       ui::TrafficLights& trafficLights,
                       ui::CaptionButton& captionButton,
@@ -286,6 +340,24 @@ void Renderer::Render(bool windowActive,
     brush_->SetColor(ToD2D(pal.windowTint));
     d2d_dc_->FillGeometry(squircle.Get(), brush_.Get());
 
+    // ---- Frosted-glass noise (surface pass) ------------------------------
+    //
+    // Tiled monochrome grain on top of the flat tint. This is what
+    // turns "muddy translucent rectangle" into "frosted glass" - the
+    // eye doesn't see the noise consciously, but reads the surface as
+    // a real material rather than a uniform colour.
+    //
+    // The bitmap brush wraps automatically (EXTEND_MODE_WRAP) so we
+    // just fill the squircle with it; no per-frame allocation, no
+    // texture binding overhead beyond a single FillGeometry.
+    if (noise_brush_) {
+        // Anchor the tile to the squircle origin so the pattern doesn't
+        // slide around when the window is being resized.
+        noise_brush_->SetTransform(D2D1::Matrix3x2F::Identity());
+        noise_brush_->SetOpacity(theme::kNoiseSurfaceAlpha);
+        d2d_dc_->FillGeometry(squircle.Get(), noise_brush_.Get());
+    }
+
     // ---- Push squircle clip for the rest of the UI -----------------------
     ComPtr<ID2D1Layer> layer;
     d2d_dc_->CreateLayer(nullptr, layer.GetAddressOf());
@@ -345,6 +417,25 @@ void Renderer::Render(bool windowActive,
     // the squircle clip - so a long menu can never escape the window.
     captionMenu.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
                        dwrite_factory_.Get());
+
+    // ---- Frosted-glass noise (chrome pass) ------------------------------
+    //
+    // Drawn LAST inside the squircle clip, on top of the entire chrome
+    // tree (sidebar pill, cards, caption button, menu, alert,
+    // traffic-lights). At ~2.5% opacity it is invisible on opaque
+    // surfaces but unifies the translucent panes with the bare
+    // squircle - they end up wearing the same grain as the surface
+    // they sit on, which is what reads as "the same material".
+    //
+    // Because we are still inside the squircle layer, this pass is
+    // automatically clipped to the window shape; no extra geometry
+    // needed.
+    if (noise_brush_) {
+        noise_brush_->SetTransform(D2D1::Matrix3x2F::Identity());
+        noise_brush_->SetOpacity(theme::kNoiseChromeAlpha);
+        const D2D1_RECT_F squircleRect{0.0f, 0.0f, swW, swH};
+        d2d_dc_->FillRectangle(squircleRect, noise_brush_.Get());
+    }
 
     d2d_dc_->PopLayer();
 

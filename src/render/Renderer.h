@@ -80,6 +80,7 @@ public:
 private:
     void EnsureSwapChain(HWND hwnd);
     void RecreateBackBufferTarget();
+    void EnsureNoiseBrush();
 
     HWND hwnd_{nullptr};
 
@@ -100,6 +101,22 @@ private:
     ComPtr<ID2D1DeviceContext>   d2d_dc_;
     ComPtr<ID2D1Bitmap1>         d2d_back_buffer_;
     ComPtr<ID2D1SolidColorBrush> brush_;
+
+    // Frosted-glass noise overlay. A 128x128 deterministic-noise
+    // bitmap tiled by a wrap-mode bitmap brush. Drawn twice per
+    // frame at very low opacity:
+    //
+    //   * Once on top of the squircle fill, so the base window
+    //     surface reads as frosted glass rather than flat tint.
+    //   * Once on top of the chrome (sidebar pill, cards, caption
+    //     button, menu, alert), so those translucent panes carry
+    //     the same grain as the surface they sit on - the eye reads
+    //     them as the same physical material.
+    //
+    // The bitmap is built once during Initialize(); the brush is
+    // reused across frames so there is no per-frame allocation.
+    ComPtr<ID2D1Bitmap>      noise_bitmap_;
+    ComPtr<ID2D1BitmapBrush> noise_brush_;
 
     // DirectWrite
     ComPtr<IDWriteFactory>       dwrite_factory_;

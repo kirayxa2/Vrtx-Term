@@ -64,6 +64,17 @@ inline constexpr float kResizeBorder = 6.0f;
 // `Palette.windowBorder` (a low-alpha white in the dark theme).
 inline constexpr float kWindowBorderWidth = 1.0f;
 
+// ---- Frosted-glass noise overlay ------------------------------------------
+//
+// Tiled 128x128 bitmap drawn at very low opacity twice per frame: once
+// over the bare squircle (so the window itself reads as frosted), once
+// over the chrome (so translucent panes inherit the same grain). The
+// numbers are deliberately low - anything above ~0.06 starts to read as
+// static rather than as a material grain.
+inline constexpr int   kNoiseTileSize     = 128;
+inline constexpr float kNoiseSurfaceAlpha = 0.040f;   // base window grain
+inline constexpr float kNoiseChromeAlpha  = 0.025f;   // grain over chrome
+
 // Traffic-lights:
 //     diameter        13 pt
 //     edge-to-edge     10 pt   (gap between adjacent discs)
@@ -442,7 +453,7 @@ inline constexpr Palette kDarkPalette{
     .captionButtonHover   = Color::FromARGB(0x40FFFFFF),
     .captionButtonPressed = Color::FromARGB(0x55FFFFFF),
 
-    .captionMenuFill         = Color::FromARGB(0xF02A2A2E),
+    .captionMenuFill         = Color::FromARGB(0xCC2E2E33),
     .captionMenuRowHover     = Color::FromARGB(0x33FFFFFF),
     .captionMenuText         = Color::FromARGB(0xFFEDEDEF),
     .captionMenuTextMuted    = Color::FromARGB(0x99EDEDEF),
@@ -450,14 +461,14 @@ inline constexpr Palette kDarkPalette{
     // System-blue accent in dark mode is brighter than in light to keep
     // contrast against the panel fill.
     .alertScrim       = Color::FromARGB(0x80000000),
-    .alertPanelFill   = Color::FromARGB(0xF02C2C30),
+    .alertPanelFill   = Color::FromARGB(0xD42E2E33),
     .alertTitle       = Color::FromARGB(0xFFEDEDEF),
     .alertMessage     = Color::FromARGB(0xCCEDEDEF),
     .alertButtonFill  = Color::FromARGB(0xFF0A84FF),
     .alertButtonHover = Color::FromARGB(0x22FFFFFF),
     .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
 
-    .settingsSidebarFill   = Color::FromARGB(0xFF26262A),
+    .settingsSidebarFill   = Color::FromARGB(0x9636363C),
     .settingsSidebarBorder = Color::FromARGB(0x33FFFFFF),
     .settingsRowHover      = Color::FromARGB(0x1AFFFFFF),
     .settingsRowActive     = Color::FromARGB(0xFF0A84FF),
@@ -471,8 +482,8 @@ inline constexpr Palette kDarkPalette{
     .settingsDoneHover     = Color::FromARGB(0x22FFFFFF),
     .settingsDoneText      = Color::FromARGB(0xFFFFFFFF),
 
-    .settingsCardFill      = Color::FromARGB(0xFF2C2C30),
-    .settingsCardBorder    = Color::FromARGB(0x1AFFFFFF),
+    .settingsCardFill      = Color::FromARGB(0xA63E3E44),
+    .settingsCardBorder    = Color::FromARGB(0x26FFFFFF),
     .settingsCardSeparator = Color::FromARGB(0x1FFFFFFF),
     .settingsSectionHeader = Color::FromARGB(0x99EDEDEF),
     .settingsRowLabel      = Color::FromARGB(0xFFEDEDEF),
@@ -529,20 +540,20 @@ inline constexpr Palette kLightPalette{
     .captionButtonHover   = Color::FromARGB(0x14000000),
     .captionButtonPressed = Color::FromARGB(0x22000000),
 
-    .captionMenuFill         = Color::FromARGB(0xF0F4F4F6),
+    .captionMenuFill         = Color::FromARGB(0xD0FFFFFF),
     .captionMenuRowHover     = Color::FromARGB(0x14000000),
     .captionMenuText         = Color::FromARGB(0xFF1A1A1C),
     .captionMenuTextMuted    = Color::FromARGB(0x991A1A1C),
 
     .alertScrim       = Color::FromARGB(0x66000000),
-    .alertPanelFill   = Color::FromARGB(0xF2F4F4F6),
+    .alertPanelFill   = Color::FromARGB(0xDDFFFFFF),
     .alertTitle       = Color::FromARGB(0xFF1A1A1C),
     .alertMessage     = Color::FromARGB(0xCC1A1A1C),
     .alertButtonFill  = Color::FromARGB(0xFF007AFF),
     .alertButtonHover = Color::FromARGB(0x14000000),
     .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
 
-    .settingsSidebarFill   = Color::FromARGB(0xFFEDEDEF),
+    .settingsSidebarFill   = Color::FromARGB(0xA0FFFFFF),
     .settingsSidebarBorder = Color::FromARGB(0x22000000),
     .settingsRowHover      = Color::FromARGB(0x10000000),
     .settingsRowActive     = Color::FromARGB(0xFF007AFF),
@@ -556,8 +567,8 @@ inline constexpr Palette kLightPalette{
     .settingsDoneHover     = Color::FromARGB(0x14000000),
     .settingsDoneText      = Color::FromARGB(0xFFFFFFFF),
 
-    .settingsCardFill      = Color::FromARGB(0xFFFFFFFF),
-    .settingsCardBorder    = Color::FromARGB(0x14000000),
+    .settingsCardFill      = Color::FromARGB(0xC2FFFFFF),
+    .settingsCardBorder    = Color::FromARGB(0x1F000000),
     .settingsCardSeparator = Color::FromARGB(0x1A000000),
     .settingsSectionHeader = Color::FromARGB(0x991A1A1C),
     .settingsRowLabel      = Color::FromARGB(0xFF1A1A1C),
