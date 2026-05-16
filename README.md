@@ -19,8 +19,8 @@ parser, glyph atlas) is the next milestone.
 | Traffic lights with group-hover and close/min/max actions | done |
 | DPI-aware rendering (PerMonitor v2) | done |
 | Drop shadow via DWM extended frame | done |
-| ConPTY shell session | planned |
-| ANSI / VT100 / xterm escape codes | planned |
+| ConPTY shell session | done |
+| ANSI / VT100 / xterm escape codes | done |
 | GPU-accelerated glyph atlas | planned |
 | Tabs, splits, profiles | post-MVP |
 
