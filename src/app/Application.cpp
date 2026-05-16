@@ -112,6 +112,19 @@ int Application::Run(HINSTANCE hInstance) {
     {
         auto& s = window_.GetSettings();
 
+        // Localised label of the primary Done button. Apple uses
+        // "Done" / "Готово" depending on the system language.
+        s.SetDoneLabel(ru ? L"Готово" : L"Done");
+
+        // Apple System Settings tile colours: each category has a
+        // distinct saturated background. We approximate the canonical
+        // SF Symbols-tinted palette.
+        const theme::Color kTileGray   = theme::Color::FromARGB(0xFF8E8E93);
+        const theme::Color kTilePurple = theme::Color::FromARGB(0xFFAF52DE);
+        const theme::Color kTileBlue   = theme::Color::FromARGB(0xFF0A84FF);
+        const theme::Color kTileGreen  = theme::Color::FromARGB(0xFF34C759);
+        const theme::Color kTileTeal   = theme::Color::FromARGB(0xFF40C8E0);
+
         s.AddItem({
             L"\u2699",   // gear
             ru ? L"Общие"      : L"General",
@@ -122,22 +135,24 @@ int Application::Run(HINSTANCE hInstance) {
                : L"Application-wide basics. Future versions will expose "
                  L"interface language, startup behaviour, and auto-update "
                  L"cadence here.",
+            kTileGray,
             nullptr,
         });
 
         s.AddItem({
-            L"\u25CE",   // bullseye - placeholder for "Appearance"
+            L"\u25D0",   // half-shaded circle - "Appearance"
             ru ? L"Внешний вид" : L"Appearance",
             ru ? L"Внешний вид" : L"Appearance",
             ru ? L"Темы (Tahoe Light / Tahoe Dark), радиус скруглений, "
                  L"непрозрачность окна и шрифты chrome будут жить здесь."
                : L"Themes (Tahoe Light / Tahoe Dark), corner radii, window "
                  L"opacity and chrome fonts will live here.",
+            kTilePurple,
             nullptr,
         });
 
         s.AddItem({
-            L"\u276F",   // > shell prompt arrow
+            L"\u276F",   // chevron-right - shell prompt arrow
             ru ? L"Промпт"      : L"Prompt",
             ru ? L"Промпт"      : L"Prompt",
             ru ? L"Конструктор однострочного и многострочного промпта (как у "
@@ -146,11 +161,12 @@ int Application::Run(HINSTANCE hInstance) {
                : L"Builder for single- and multi-line prompts (oh-my-posh / "
                  L"starship style). You will be able to tune segments, "
                  L"colours, icons and Git status display.",
+            kTileBlue,
             nullptr,
         });
 
         s.AddItem({
-            L"\u2316",   // crosshair - "Terminal"
+            L"\u25A2",   // square w/ rounded corners - "Terminal"
             ru ? L"Терминал"    : L"Terminal",
             ru ? L"Терминал"    : L"Terminal",
             ru ? L"Шрифт и его размер, lineHeight, ANSI-палитра, размер "
@@ -159,6 +175,7 @@ int Application::Run(HINSTANCE hInstance) {
                : L"Font face and size, line height, ANSI palette, scrollback "
                  L"depth and bell behaviour. The values are currently "
                  L"hard-coded in TahoeTheme.",
+            kTileGreen,
             nullptr,
         });
 
@@ -172,6 +189,7 @@ int Application::Run(HINSTANCE hInstance) {
                : L"MacTermWin\nA macOS 26 Tahoe-styled terminal for Windows.\n"
                  L"Built as an experiment with DirectComposition + Direct2D "
                  L"and zero DWM-painted chrome.",
+            kTileTeal,
             nullptr,
         });
     }

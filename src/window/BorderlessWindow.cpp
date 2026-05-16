@@ -164,6 +164,11 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     // The alert button defaults to dismissing the dialog.
     app_alert_.SetOnDismiss([this]() { DismissAlert(); });
 
+    // The Settings sheet's Done button defaults to closing the sheet.
+    // The window also reacts to the boolean returned from OnLButtonUp,
+    // so this is belt-and-braces for callers that subscribe later.
+    settings_.SetOnDone([this]() { HideSettings(); });
+
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
     Trace("window shown");

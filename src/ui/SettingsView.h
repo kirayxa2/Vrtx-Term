@@ -1,40 +1,39 @@
-// In-window Settings sheet rendered through D2D - macOS Tahoe System
-// Settings clone (sidebar on the left, content pane on the right).
+// In-window Settings sheet rendered through D2D - macOS 26 Tahoe System
+// Settings clone.
 //
-// Why a separate component instead of opening another HWND:
+// Anatomy:
 //
-//   - The whole point of MacTermWin is that everything inside the window
-//     belongs to us. A foreign Win32 dialog would bring back the DWM
-//     decorations, square corners, and the wrong fonts.
-//   - Animations stay in sync with the rest of the chrome. The Settings
-//     sheet can fade in over the terminal grid without crossing process
-//     or composition boundaries.
+//   +---------------------------------------------------------------+
+//   | (caption strip stays visible: traffic lights + drag still OK) |
+//   +---------------------------------------------------------------+
+//   |  +-------------------------------------------------+          |
+//   |  |  +----------+   ┊                       [Done]  |          |
+//   |  |  | sidebar  |   ┊   <pane title>                |          |
+//   |  |  |          |   ┊                               |          |
+//   |  |  | [G] Gen  |   ┊   +-------------------------+ |          |
+//   |  |  | [A] App  |   ┊   |    body card            | |          |
+//   |  |  | [P] Prom |   ┊   +-------------------------+ |          |
+//   |  |  |  ...     |   ┊                               |          |
+//   |  +-------------------------------------------------+          |
+//   +---------------------------------------------------------------+
 //
-// Layout, top to bottom of the squircle (caption strip excluded):
-//
-//   +------------------------------------------------------------+
-//   | (caption strip stays visible: traffic lights still work)   |
-//   +-----------------+------------------------------------------+
-//   |                 |                                          |
-//   |   sidebar       |   content pane                           |
-//   |   - General     |                                          |
-//   |   - Appearance  |   <pane title>                           |
-//   |   - Prompt      |                                          |
-//   |   - Terminal    |   <body for the active section>          |
-//   |   - About       |                                          |
-//   |                 |                                          |
-//   |                 |                                          |
-//   |                 |                                          |
-//   +-----------------+------------------------------------------+
+//   * One outer rounded translucent shell. Apple does not draw two
+//     separate cards - sidebar and content are cells in the same
+//     panel, separated by a 1pt hairline.
+//   * Each sidebar row has a saturated coloured "tile" with a white
+//     glyph on it (the SF Symbols-tinted look). This is the most
+//     recognisable cue of Tahoe System Settings; without it, the
+//     sheet looks generic.
+//   * Active row is filled with the system blue pill, label turns
+//     white. Hover is a faint translucent overlay.
+//   * Top-right "Done" pill closes the sheet (Tahoe replaces the
+//     Sequoia X/circle with this button).
 //
 // All sizes (sidebar width, paddings, radii, etc.) live in
 // theme::TahoeTheme.h. The class is intentionally just a view: it
 // doesn't own settings state. Each row's `on_pick` is wired by
 // Application::Run so handlers can mutate the live profile / theme
 // later.
-//
-// API mirrors CaptionMenu / AppAlert so the host window can drive the
-// open/close animation with a simple `progress_` float.
 
 #pragma once
 
@@ -46,13 +45,15 @@ namespace mactw::ui {
 class SettingsView {
 public:
     using ItemHandler = std::function<void()>;
+    using DoneHandler = std::function<void()>;
 
     struct Item {
-        std::wstring glyph;     // single grapheme (Segoe UI Symbol)
-        std::wstring label;     // localised
-        std::wstring title;     // shown as the main pane title when active
-        std::wstring body;      // wrapped paragraph shown in the content pane
-        ItemHandler  on_pick;   // optional, fires when a row is clicked
+        std::wstring   glyph;       // single grapheme drawn on the tile
+        std::wstring   label;       // localised
+        std::wstring   title;       // shown as the main pane title when active
+        std::wstring   body;        // wrapped paragraph shown in the content pane
+        theme::Color   tile_color;  // tile background (saturated SF colour)
+        ItemHandler    on_pick;     // optional, fires when a row is clicked
     };
 
     void AddItem(Item it) { items_.push_back(std::move(it)); }
@@ -67,7 +68,8 @@ public:
     bool IsClosing()   const { return closing_; }
 
     void Show()           { open_ = true;  closing_ = false;
-                             hover_index_ = -1; pressed_index_ = -1; }
+                             hover_index_ = -1; pressed_index_ = -1;
+                             hover_done_ = false; pressed_done_ = false; }
     void RequestClose()   { closing_ = true; }
     void SetOpen(bool v) {
         open_ = v;
@@ -75,8 +77,8 @@ public:
             closing_ = false;
             hover_index_ = -1;
             pressed_index_ = -1;
-            hover_close_ = false;
-            pressed_close_ = false;
+            hover_done_ = false;
+            pressed_done_ = false;
         }
     }
     void SetProgress(float p) { progress_ = std::clamp(p, 0.0f, 1.0f); }
@@ -90,7 +92,7 @@ public:
     void OnMouseMove(int x, int y);
     void OnMouseLeave();
     void OnLButtonDown(int x, int y);
-    // Returns true if the user closed the sheet via the close-button.
+    // Returns true if the user closed the sheet via the Done button.
     bool OnLButtonUp(int x, int y);
 
     void Render(ID2D1DeviceContext* dc,
@@ -104,32 +106,48 @@ public:
     }
     int ActiveIndex() const { return active_index_; }
 
+    // Optional callback fired when the user taps Done. The window
+    // typically responds by starting the close animation.
+    void SetOnDone(DoneHandler h) { on_done_ = std::move(h); }
+
+    // Localised label for the primary Done button (e.g. "Done" /
+    // "Готово"). Defaults to "Done" so callers that don't bother still
+    // get a sane fallback.
+    void SetDoneLabel(std::wstring s) { done_label_ = std::move(s); }
+
 private:
-    int RowAt(int x, int y) const;
-    bool CloseAt(int x, int y) const;
+    int  RowAt(int x, int y) const;
+    bool DoneAt(int x, int y) const;
 
     // Layout cache (squircle-local px).
-    D2D1_RECT_F sidebar_       {};
-    D2D1_RECT_F content_       {};
-    D2D1_RECT_F close_btn_     {};
+    D2D1_RECT_F shell_         {};   // outer rounded panel
+    D2D1_RECT_F sidebar_       {};   // sidebar cell (tinted band)
+    D2D1_RECT_F content_       {};   // content cell
+    D2D1_RECT_F done_btn_      {};   // top-right Done pill
     float       outer_pad_px_  {0};
-    float       pane_radius_px_{0};
+    float       shell_radius_px_{0};
     float       row_h_px_      {0};
     float       row_gap_px_    {0};
     float       row_pad_x_px_  {0};
     float       row_radius_px_ {0};
-    float       icon_size_px_  {0};
-    float       icon_gap_px_   {0};
+    float       row_side_pad_px_{0};
+    float       tile_size_px_  {0};
+    float       tile_radius_px_{0};
+    float       tile_glyph_px_ {0};
+    float       tile_text_gap_px_{0};
     float       row_text_px_   {0};
-    float       header_text_px_{0};
-    float       header_pad_x_px_{0};
-    float       header_top_gap_px_{0};
-    float       header_bot_gap_px_{0};
+    float       sidebar_top_gap_px_{0};
+    float       sidebar_bot_gap_px_{0};
     float       content_pad_x_px_{0};
     float       content_pad_y_px_{0};
     float       title_text_px_ {0};
+    float       title_bot_gap_px_{0};
     float       body_text_px_  {0};
-    float       close_diam_px_ {0};
+    float       card_radius_px_{0};
+    float       card_pad_x_px_ {0};
+    float       card_pad_y_px_ {0};
+    float       done_text_px_  {0};
+    float       sep_w_px_      {0};
 
     bool   open_     {false};
     bool   closing_  {false};
@@ -138,24 +156,24 @@ private:
     int    active_index_  {0};
     int    hover_index_   {-1};
     int    pressed_index_ {-1};
-    bool   hover_close_   {false};
-    bool   pressed_close_ {false};
+    bool   hover_done_    {false};
+    bool   pressed_done_  {false};
 
     std::vector<Item> items_;
+    DoneHandler       on_done_;
+    std::wstring      done_label_{L"Done"};
 
     // DWrite format cache: built once per DPI, reused across frames.
     mutable ComPtr<IDWriteTextFormat> row_fmt_;
-    mutable ComPtr<IDWriteTextFormat> icon_fmt_;
-    mutable ComPtr<IDWriteTextFormat> header_fmt_;
+    mutable ComPtr<IDWriteTextFormat> tile_fmt_;
     mutable ComPtr<IDWriteTextFormat> title_fmt_;
     mutable ComPtr<IDWriteTextFormat> body_fmt_;
-    mutable ComPtr<IDWriteTextFormat> close_fmt_;
+    mutable ComPtr<IDWriteTextFormat> done_fmt_;
     mutable float built_at_row_   {0};
-    mutable float built_at_icon_  {0};
-    mutable float built_at_header_{0};
+    mutable float built_at_tile_  {0};
     mutable float built_at_title_ {0};
     mutable float built_at_body_  {0};
-    mutable float built_at_close_ {0};
+    mutable float built_at_done_  {0};
 };
 
 }  // namespace mactw::ui

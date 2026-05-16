@@ -143,35 +143,57 @@ inline constexpr int   kAlertAnimDurationMs = 220;
 
 // ---- Settings sheet (in-window) ------------------------------------------
 //
-// macOS Tahoe System Settings - sidebar on the left, content pane on the
-// right, both rounded, with breathing space between. We render exactly
-// the same structure inside the squircle. Sidebar items are pill rows
-// with an SF Symbol-style glyph + label; the active row gets the system
-// accent fill.
+// macOS 26 Tahoe System Settings, mirrored as faithfully as we can:
+//
+//   * One single rounded translucent shell. The sidebar and content
+//     are not two separate cards (that was the old MVP and looked
+//     wrong on the reference screenshots) - they're cells inside the
+//     same panel, separated by a 1pt hairline.
+//   * Sidebar rows have a coloured "icon tile" on the left: a small
+//     5pt rounded square in a saturated SF Symbols-style color
+//     (gray / red / blue / green / etc.) with a white glyph centred.
+//     This is the most iconic visual cue of System Settings.
+//   * The active row's whole pill is filled with system blue + white
+//     text + a SLIGHTLY brightened tile so the icon still reads.
+//   * The content area starts with a large title (28pt semi-bold)
+//     then group cards (18pt rounded) - we don't ship real controls
+//     yet, but the chrome is set up to host them.
+//   * A primary "Done" button (system blue pill, white text) sits in
+//     the top-right of the content area. There's no X button in the
+//     sidebar; that's the Sequoia/Sonoma look. Tahoe uses Done.
 
-inline constexpr float kSettingsSidebarWidth      = 200.0f;
-inline constexpr float kSettingsContentMinWidth   = 360.0f;
-inline constexpr float kSettingsOuterPadding      = 12.0f;   // gutter inside squircle
-inline constexpr float kSettingsPaneCornerRadius  = 12.0f;   // sidebar + content panes
-inline constexpr float kSettingsRowHeight         = 30.0f;
-inline constexpr float kSettingsRowGap            =  2.0f;
-inline constexpr float kSettingsRowPaddingX       =  8.0f;
-inline constexpr float kSettingsRowRadius         =  7.0f;
-inline constexpr float kSettingsRowIconSize       = 14.0f;
-inline constexpr float kSettingsRowIconGap        =  9.0f;
-inline constexpr float kSettingsRowTextSize       = 13.0f;
-inline constexpr float kSettingsHeaderTextSize    = 11.0f;
-inline constexpr float kSettingsHeaderPaddingX    = 12.0f;
-inline constexpr float kSettingsHeaderTopGap      = 10.0f;   // before first header
-inline constexpr float kSettingsHeaderBottomGap   =  4.0f;
-inline constexpr float kSettingsContentPaddingX   = 24.0f;
-inline constexpr float kSettingsContentPaddingY   = 22.0f;
-inline constexpr float kSettingsTitleSize         = 22.0f;   // pane title
-inline constexpr float kSettingsBodyTextSize      = 13.0f;
-inline constexpr float kSettingsCloseDiameter     = 22.0f;   // small circular X
-inline constexpr float kSettingsCloseInsetX       =  8.0f;   // from sidebar right
-inline constexpr float kSettingsCloseInsetY       =  8.0f;
-inline constexpr int   kSettingsAnimDurationMs    = 280;
+inline constexpr float kSettingsSidebarWidth        = 210.0f;
+inline constexpr float kSettingsOuterPadding        = 14.0f;  // gutter inside squircle
+inline constexpr float kSettingsShellCornerRadius   = 14.0f;  // outer shell
+inline constexpr float kSettingsRowHeight           = 32.0f;
+inline constexpr float kSettingsRowGap              =  2.0f;
+inline constexpr float kSettingsRowPaddingX         =  8.0f;  // pill side padding
+inline constexpr float kSettingsRowRadius           =  7.0f;
+inline constexpr float kSettingsRowSidePadding      = 10.0f;  // sidebar -> pill edges
+inline constexpr float kSettingsTileSize            = 22.0f;  // icon tile
+inline constexpr float kSettingsTileRadius          =  5.0f;
+inline constexpr float kSettingsTileGlyphSize       = 13.0f;
+inline constexpr float kSettingsTileTextGap         = 10.0f;  // tile -> label
+inline constexpr float kSettingsRowTextSize         = 13.0f;
+inline constexpr float kSettingsSidebarTopGap       = 14.0f;  // top of sidebar -> first row
+inline constexpr float kSettingsSidebarBottomGap    = 14.0f;
+inline constexpr float kSettingsGroupGap            = 10.0f;  // between sidebar groups
+inline constexpr float kSettingsContentPaddingX     = 28.0f;
+inline constexpr float kSettingsContentPaddingY     = 20.0f;
+inline constexpr float kSettingsTitleSize           = 26.0f;  // pane title
+inline constexpr float kSettingsTitleBottomGap      = 14.0f;
+inline constexpr float kSettingsBodyTextSize        = 13.0f;
+inline constexpr float kSettingsCardRadius          = 11.0f;
+inline constexpr float kSettingsCardPaddingX        = 14.0f;
+inline constexpr float kSettingsCardPaddingY        = 12.0f;
+inline constexpr float kSettingsDoneWidth           = 86.0f;  // primary Done pill
+inline constexpr float kSettingsDoneHeight          = 26.0f;
+inline constexpr float kSettingsDoneRadius          =  6.0f;
+inline constexpr float kSettingsDoneTextSize        = 13.0f;
+inline constexpr float kSettingsDoneInsetX          = 18.0f;  // from shell right
+inline constexpr float kSettingsDoneInsetY          = 16.0f;  // from shell top
+inline constexpr float kSettingsSeparatorWidth      =  1.0f;  // sidebar | content
+inline constexpr int   kSettingsAnimDurationMs      = 260;
 
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
@@ -262,10 +284,15 @@ struct Palette {
     Color alertButtonText;   // primary button glyph
 
     // In-window Settings sheet (Tahoe System Settings clone).
+    //
+    // The shell is one big translucent rounded panel; sidebar and
+    // content live inside it with a hairline separator between. Tile
+    // colours are the canonical SF Symbols-tinted backgrounds Apple
+    // uses for category icons in System Settings.
     Color settingsScrim;        // dim layer over terminal while open
-    Color settingsSidebarFill;  // left rounded pane
-    Color settingsContentFill;  // right rounded pane
-    Color settingsHeader;       // section header text colour ("General", etc.)
+    Color settingsShellFill;    // outer rounded panel (single shell)
+    Color settingsSidebarFill;  // tinted band behind sidebar rows
+    Color settingsSeparator;    // 1pt hairline between sidebar / content
     Color settingsRowHover;     // hovered sidebar row overlay
     Color settingsRowActive;    // selected sidebar row fill (system accent)
     Color settingsRowText;      // sidebar row label
@@ -273,8 +300,11 @@ struct Palette {
     Color settingsTitle;        // big pane title ("Appearance")
     Color settingsBody;         // pane body text
     Color settingsBodyMuted;    // secondary body text (descriptions)
-    Color settingsCloseFill;    // top-right close-X background
-    Color settingsCloseGlyph;   // close-X stroke
+    Color settingsCardFill;     // group card inside content pane
+    Color settingsTileGlyph;    // glyph drawn on top of the icon tile
+    Color settingsDoneFill;     // primary Done button
+    Color settingsDoneHover;    // Done hover overlay (additive)
+    Color settingsDoneText;     // Done glyph colour
 
     // Text
     Color text;
@@ -332,18 +362,21 @@ inline constexpr Palette kDarkPalette{
     .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
 
     .settingsScrim         = Color::FromARGB(0x99000000),
-    .settingsSidebarFill   = Color::FromARGB(0xFF222226),
-    .settingsContentFill   = Color::FromARGB(0xFF1F1F23),
-    .settingsHeader        = Color::FromARGB(0x99EDEDEF),
-    .settingsRowHover      = Color::FromARGB(0x22FFFFFF),
+    .settingsShellFill     = Color::FromARGB(0xF21F1F23),
+    .settingsSidebarFill   = Color::FromARGB(0x14FFFFFF),
+    .settingsSeparator     = Color::FromARGB(0x22FFFFFF),
+    .settingsRowHover      = Color::FromARGB(0x1AFFFFFF),
     .settingsRowActive     = Color::FromARGB(0xFF0A84FF),
     .settingsRowText       = Color::FromARGB(0xFFEDEDEF),
     .settingsRowTextActive = Color::FromARGB(0xFFFFFFFF),
     .settingsTitle         = Color::FromARGB(0xFFEDEDEF),
     .settingsBody          = Color::FromARGB(0xFFEDEDEF),
     .settingsBodyMuted     = Color::FromARGB(0x99EDEDEF),
-    .settingsCloseFill     = Color::FromARGB(0x33FFFFFF),
-    .settingsCloseGlyph    = Color::FromARGB(0xFFEDEDEF),
+    .settingsCardFill      = Color::FromARGB(0x14FFFFFF),
+    .settingsTileGlyph     = Color::FromARGB(0xFFFFFFFF),
+    .settingsDoneFill      = Color::FromARGB(0xFF0A84FF),
+    .settingsDoneHover     = Color::FromARGB(0x22FFFFFF),
+    .settingsDoneText      = Color::FromARGB(0xFFFFFFFF),
 
     .text      = Color::FromARGB(0xFFEDEDEF),
     .textMuted = Color::FromARGB(0x99EDEDEF),
@@ -404,18 +437,21 @@ inline constexpr Palette kLightPalette{
     .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
 
     .settingsScrim         = Color::FromARGB(0x66000000),
-    .settingsSidebarFill   = Color::FromARGB(0xFFEFEFF1),
-    .settingsContentFill   = Color::FromARGB(0xFFF8F8F8),
-    .settingsHeader        = Color::FromARGB(0x991A1A1C),
-    .settingsRowHover      = Color::FromARGB(0x14000000),
+    .settingsShellFill     = Color::FromARGB(0xF2F4F4F6),
+    .settingsSidebarFill   = Color::FromARGB(0x10000000),
+    .settingsSeparator     = Color::FromARGB(0x14000000),
+    .settingsRowHover      = Color::FromARGB(0x10000000),
     .settingsRowActive     = Color::FromARGB(0xFF007AFF),
     .settingsRowText       = Color::FromARGB(0xFF1A1A1C),
     .settingsRowTextActive = Color::FromARGB(0xFFFFFFFF),
     .settingsTitle         = Color::FromARGB(0xFF1A1A1C),
     .settingsBody          = Color::FromARGB(0xFF1A1A1C),
     .settingsBodyMuted     = Color::FromARGB(0x991A1A1C),
-    .settingsCloseFill     = Color::FromARGB(0x14000000),
-    .settingsCloseGlyph    = Color::FromARGB(0xFF1A1A1C),
+    .settingsCardFill      = Color::FromARGB(0xFFFFFFFF),
+    .settingsTileGlyph     = Color::FromARGB(0xFFFFFFFF),
+    .settingsDoneFill      = Color::FromARGB(0xFF007AFF),
+    .settingsDoneHover     = Color::FromARGB(0x14000000),
+    .settingsDoneText      = Color::FromARGB(0xFFFFFFFF),
 
     .text      = Color::FromARGB(0xFF1A1A1C),
     .textMuted = Color::FromARGB(0x991A1A1C),
