@@ -2,6 +2,8 @@
 
 #include <cstdio>
 
+#include "ui/TabBar.h"
+
 namespace vrtx::app {
 
 namespace {
@@ -20,49 +22,117 @@ void Trace(const char* msg) {
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// Tab management
+// ---------------------------------------------------------------------------
+
+void Application::RebuildTabBar() {
+    std::vector<ui::Tab> tabs;
+    for (int i = 0; i < static_cast<int>(sessions_.size()); ++i) {
+        const std::wstring title = L"bash";
+        tabs.push_back({title, i == active_tab_});
+    }
+    window_.GetTabBar().SetTabs(std::move(tabs), active_tab_);
+    window_.RelayoutTabBar();
+}
+
+void Application::OpenNewTab() {
+    auto s = std::make_unique<terminal::TerminalSession>();
+    int cols = 80, rows = 24;
+    // Inherit current grid size from renderer.
+    // (Don't have direct access here — use a reasonable default;
+    //  SyncPtyToSize in SetSession will correct it on the next WM_SIZE.)
+    bool ok = s->Start(cols, rows);
+    if (!ok) {
+        window_.ShowAlert(L"Failed to launch shell",
+                          L"Could not open a new terminal session.",
+                          L"OK");
+        return;
+    }
+
+    sessions_.push_back(std::move(s));
+    active_tab_ = static_cast<int>(sessions_.size()) - 1;
+
+    window_.SetSession(sessions_[active_tab_].get());
+    RebuildTabBar();
+}
+
+void Application::CloseTab(int index) {
+    if (index < 0 || index >= static_cast<int>(sessions_.size())) return;
+    if (sessions_.size() == 1) {
+        // Last tab — close the window.
+        ::PostMessageW(window_.Hwnd(), WM_CLOSE, 0, 0);
+        return;
+    }
+
+    sessions_[index]->Stop();
+    sessions_.erase(sessions_.begin() + index);
+
+    // Pick a sensible active tab after removal.
+    if (active_tab_ >= static_cast<int>(sessions_.size()))
+        active_tab_ = static_cast<int>(sessions_.size()) - 1;
+
+    window_.SetSession(sessions_[active_tab_].get());
+    RebuildTabBar();
+}
+
+void Application::SwitchTab(int index) {
+    if (index < 0 || index >= static_cast<int>(sessions_.size())) return;
+    active_tab_ = index;
+    window_.SetSession(sessions_[active_tab_].get());
+    RebuildTabBar();
+}
+
+// ---------------------------------------------------------------------------
+
 int Application::Run(HINSTANCE hInstance) {
     Trace("Run() entered");
 
-    // PerMonitorV2 is set in app.manifest, but call SetProcessDpiAwarenessContext
-    // as a belt-and-braces measure on systems where the manifest is ignored.
     ::SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     Trace("DPI awareness set");
 
     window_.Create(hInstance, L"Vrtx Term");
     Trace("window created");
 
-    // Spawn the shell once the window has its first valid size. The window
-    // pushes the live (cols, rows) into the session via SetSession's
-    // initial SyncPtyToSize, so we don't need to know the geometry here -
-    // we just have to pick *some* sane starting grid for Start() before
-    // the first WM_SIZE arrives.
-    bool sessionStarted = session_.Start(80, 24);
-    if (!sessionStarted) {
-        Trace("session start FAILED");
-    } else {
-        Trace("session started");
+    // Wire tab-bar callbacks BEFORE creating the first session.
+    {
+        auto& tb = window_.GetTabBar();
+        tb.SetOnNewTab ([this]()      { OpenNewTab();  });
+        tb.SetOnClose  ([this](int i) { CloseTab(i);   });
+        tb.SetOnSwitch ([this](int i) { SwitchTab(i);  });
     }
-    window_.SetSession(&session_);
-    Trace("session bound to window");
+
+    // Open the first tab.
+    {
+        auto s = std::make_unique<terminal::TerminalSession>();
+        bool ok = s->Start(80, 24);
+        if (!ok) Trace("session start FAILED");
+        else     Trace("session started");
+
+        sessions_.push_back(std::move(s));
+        active_tab_ = 0;
+
+        window_.SetSession(sessions_[0].get());
+        RebuildTabBar();
+        Trace("session bound to window");
+
+        if (!ok) {
+            const LANGID langId = ::GetUserDefaultUILanguage();
+            const bool   ru     = (PRIMARYLANGID(langId) == LANG_RUSSIAN);
+            window_.ShowAlert(
+                ru ? L"Не удалось запустить оболочку"
+                   : L"Failed to launch a shell",
+                ru ? L"PowerShell, pwsh, powershell.exe и cmd.exe оказались "
+                     L"недоступны. Установите PowerShell или проверьте PATH "
+                     L"и попробуйте снова."
+                   : L"PowerShell, pwsh, powershell.exe and cmd.exe were all "
+                     L"unreachable. Install PowerShell or check PATH and try again.",
+                L"OK");
+        }
+    }
 
     const LANGID langId = ::GetUserDefaultUILanguage();
     const bool   ru     = (PRIMARYLANGID(langId) == LANG_RUSSIAN);
-
-    // If the shell wouldn't launch, surface the failure as one of our
-    // own alerts (no MessageBoxW). The terminal stays empty until the
-    // user dismisses; they can then close the window with the close
-    // traffic light.
-    if (!sessionStarted) {
-        window_.ShowAlert(
-            ru ? L"Не удалось запустить оболочку"
-               : L"Failed to launch a shell",
-            ru ? L"PowerShell, pwsh, powershell.exe и cmd.exe оказались "
-                 L"недоступны. Установите PowerShell или проверьте PATH "
-                 L"и попробуйте снова."
-               : L"PowerShell, pwsh, powershell.exe and cmd.exe were all "
-                 L"unreachable. Install PowerShell or check PATH and try again.",
-            L"OK");
-    }
 
     // Populate the caption-menu with default items. Labels are localised
     // by the user's UI language: Russian if the primary language is RU,
@@ -400,9 +470,10 @@ int Application::Run(HINSTANCE hInstance) {
     }
     Trace("message loop exited");
 
-    // Tear the session down before the window so the reader thread doesn't
+    // Tear all sessions down before the window so reader threads don't
     // race with the dying renderer.
-    session_.Stop();
+    for (auto& s : sessions_) s->Stop();
+    sessions_.clear();
     return static_cast<int>(msg.wParam);
 }
 

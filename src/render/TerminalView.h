@@ -24,12 +24,18 @@
 
 #include "pch.h"
 #include "terminal/TerminalSession.h"
+#include "render/GlyphAtlas.h"
+#include "render/AtlasRenderer.h"
 
 namespace vrtx::render {
 
 class TerminalView {
 public:
-    void Initialize(IDWriteFactory* dwrite, UINT dpi);
+    // Initialize now also needs D3D device for the GPU atlas.
+    void Initialize(IDWriteFactory* dwrite, UINT dpi,
+                    ID3D11Device* d3dDevice,
+                    ID3D11DeviceContext* d3dCtx,
+                    ID2D1DeviceContext* d2dDc);
 
     // Recreate the text formats for the new DPI. Cell metrics are
     // recomputed.
@@ -51,10 +57,14 @@ public:
 
     // Draw the grid for `session` into the rect (squircle-local px,
     // already inside the squircle clip layer).
+    // swapW/swapH are the full swap-chain dimensions (for GPU atlas NDC).
     void Draw(ID2D1DeviceContext* dc,
               terminal::TerminalSession& session,
               D2D1_RECT_F contentRectPx,
-              bool focused);
+              bool focused,
+              float swapW, float swapH,
+              float originOffsetX = 0.0f,
+              float originOffsetY = 0.0f);
 
 private:
     void RebuildFormats();
@@ -77,6 +87,13 @@ private:
     float baseline_px_ {12.0f};
     float pad_x_px_    {12.0f};
     float pad_y_px_    {8.0f};
+
+    // GPU glyph atlas + instanced renderer.
+    GlyphAtlas                   atlas_;
+    AtlasRenderer                atlasRenderer_;
+    ComPtr<ID3D11DeviceContext>  d3dCtx_;
+    ComPtr<ID2D1SolidColorBrush>  fillBrush_;  // reused across Draw() calls
+    bool                         atlasReady_{false};
 };
 
 }  // namespace vrtx::render

@@ -34,19 +34,42 @@ bool ColorsEqual(D2D1_COLOR_F a, D2D1_COLOR_F b) {
 
 // ---------------------------------------------------------------------------
 
-void TerminalView::Initialize(IDWriteFactory* dwrite, UINT dpi) {
+void TerminalView::Initialize(IDWriteFactory* dwrite, UINT dpi,
+                              ID3D11Device* d3dDevice,
+                              ID3D11DeviceContext* d3dCtx,
+                              ID2D1DeviceContext* d2dDc) {
     dwrite_ = dwrite;
-    // IDWriteFactory2 (Win 8.1+) is needed for IDWriteFontFallbackBuilder.
-    // Every Win10 box has it, so this should never fail in practice.
     dwrite_.As(&dwrite2_);
     dpi_    = dpi;
     BuildFontFallback();
     RebuildFormats();
+
+    // Initialise the GPU atlas + renderer.
+    if (d3dDevice && d3dCtx) {
+        d3dCtx_ = d3dCtx;
+        atlas_.Initialize(d3dDevice, d3dCtx, dwrite,
+                          fmt_regular_.Get(), fmt_bold_.Get(),
+                          fmt_italic_.Get(), fmt_bold_italic_.Get(),
+                          cell_w_px_, cell_h_px_);
+        atlasReady_ = atlasRenderer_.Initialize(d3dDevice, d3dCtx);
+    }
+
+    // Pre-create the brush used for all text and background draws.
+    if (d2dDc) {
+        d2dDc->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1),
+                                     fillBrush_.GetAddressOf());
+    }
 }
 
 void TerminalView::OnDpiChanged(UINT dpi) {
     dpi_ = dpi;
     RebuildFormats();
+    // Notify atlas that cell size has changed (flushes cached glyphs).
+    if (atlasReady_) {
+        atlas_.OnMetricsChanged(fmt_regular_.Get(), fmt_bold_.Get(),
+                                fmt_italic_.Get(), fmt_bold_italic_.Get(),
+                                cell_w_px_, cell_h_px_);
+    }
 }
 
 // ---- Font fallback -------------------------------------------------------
@@ -247,7 +270,9 @@ void TerminalView::GridForContent(float w, float h, int& cols, int& rows) const 
 void TerminalView::Draw(ID2D1DeviceContext* dc,
                         terminal::TerminalSession& session,
                         D2D1_RECT_F rect,
-                        bool focused) {
+                        bool focused,
+                        float swapW, float swapH,
+                        float originOffsetX, float originOffsetY) {
     if (!fmt_regular_) return;
 
     auto& buf = session.Buffer();
@@ -263,7 +288,10 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
     const float originY = rect.top  + pad_y_px_;
 
     ComPtr<ID2D1SolidColorBrush> fillBrush;
-    dc->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 1), fillBrush.GetAddressOf());
+    if (!fillBrush_) {
+        dc->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), fillBrush_.GetAddressOf());
+    }
+    fillBrush = fillBrush_;
 
     // Snapshot the visible viewport into a flat array of cells. This costs
     // one extra copy per frame but keeps the rest of the drawing code in
@@ -342,9 +370,107 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
         }
     }
 
-    // ---- Pass 2: glyph runs --------------------------------------------
-    std::wstring runText;
-    runText.reserve(static_cast<size_t>(cols) + 8);
+    // ---- Pass 2: glyph runs (GPU atlas path when available) ---------------
+    std::wstring runText;   // reused across runs in the DrawTextW fallback
+    // NOTE: GPU atlas (atlasReady_) is intentionally disabled — D3D draws
+    // happen between D2D BeginDraw/EndDraw which causes D2D to overwrite
+    // the D3D output. All text goes through the D2D DrawTextW path.
+    if (false && atlasReady_) {
+        atlasRenderer_.BeginFrame();
+
+        for (int r = 0; r < rows; ++r) {
+            const float y    = originY + r * cell_h_px_;
+            const int64_t ar = buf.ViewportRowToAbs(r);
+
+            for (int c = 0; c < cols; ++c) {
+                const auto& cell = cells[r * cols + c];
+                char32_t cp = cell.ch;
+
+                // Skip spaces, NUL, and box-drawing (handled by CPU path below).
+                if (cp == 0 || cp == U' ') continue;
+                if (box::IsBoxDrawing(cp) || box::IsBlockElement(cp)) continue;
+
+                const bool selected = buf.IsCellSelected(ar, c);
+                const bool reverse  = (cell.attrs & terminal::attr::kReverse) != 0;
+
+                D2D1_COLOR_F fg;
+                if (selected) {
+                    fg = selFg;
+                } else {
+                    const auto& fgSrc = reverse ? cell.bg : cell.fg;
+                    fg = ResolveColor(fgSrc, pal, /*isBg=*/reverse);
+                }
+
+                const uint16_t a = cell.attrs &
+                    (terminal::attr::kBold | terminal::attr::kItalic);
+
+                GlyphKey key{cp, a, 0};
+                GlyphSlot slot{};
+
+                // Retry once after a flush if atlas is full.
+                if (!atlas_.GetOrRasterize(key, slot)) {
+                    atlas_.Flush();
+                    atlas_.GetOrRasterize(key, slot);
+                }
+
+                if (!slot.valid) continue;
+
+                const float inv = atlas_.AtlasSizeF();
+                GlyphInstance inst{};
+                inst.destX = originX + c * cell_w_px_;
+                inst.destY = y;
+                inst.srcU0 = slot.x / inv;
+                inst.srcV0 = slot.y / inv;
+                inst.srcU1 = (slot.x + slot.w) / inv;
+                inst.srcV1 = (slot.y + slot.h) / inv;
+                inst.offX  = -slot.bearingX;
+                inst.offY  = -slot.bearingY;
+                inst.r     = fg.r;
+                inst.g     = fg.g;
+                inst.b     = fg.b;
+                inst.a     = fg.a;
+                atlasRenderer_.AddGlyph(inst);
+            }
+        }
+
+        // Flush all glyphs in one instanced draw.
+        // We need the D3D context — retrieve it from the D2D device context
+        // via the underlying DXGI surface.  Since AtlasRenderer holds ctx_
+        // from Initialize() we pass nullptr and it uses its cached pointer.
+        // We also need the swap-chain dimensions for the VS cbuffer; use the
+        // content rect as a proxy (close enough — the squircle margin is small).
+        atlasRenderer_.Flush(d3dCtx_.Get(), atlas_.SRV(), swapW, swapH,
+                             originOffsetX, originOffsetY);
+
+        // CPU fallback for box-drawing glyphs (unchanged).
+        const float lightPx = std::max(1.0f, std::round(cell_h_px_ * 0.07f));
+        const float heavyPx = std::max(2.0f, std::round(cell_h_px_ * 0.18f));
+        for (int r = 0; r < rows; ++r) {
+            const float y = originY + r * cell_h_px_;
+            const int64_t ar = buf.ViewportRowToAbs(r);
+            for (int c = 0; c < cols; ++c) {
+                const auto& cell = cells[r * cols + c];
+                char32_t cp = cell.ch;
+                if (!box::IsBoxDrawing(cp) && !box::IsBlockElement(cp)) continue;
+
+                const bool selected = buf.IsCellSelected(ar, c);
+                const bool reverse  = (cell.attrs & terminal::attr::kReverse) != 0;
+                D2D1_COLOR_F fg;
+                if (selected) { fg = selFg; }
+                else {
+                    const auto& fgSrc = reverse ? cell.bg : cell.fg;
+                    fg = ResolveColor(fgSrc, pal, reverse);
+                }
+                fillBrush->SetColor(fg);
+                D2D1_RECT_F cellRect{
+                    originX + c * cell_w_px_, y,
+                    originX + (c + 1) * cell_w_px_, y + cell_h_px_,
+                };
+                box::DrawGlyph(dc, fillBrush.Get(), cellRect, cp, lightPx, heavyPx);
+            }
+        }
+
+    } else {
 
     for (int r = 0; r < rows; ++r) {
         const float y    = originY + r * cell_h_px_;
@@ -436,6 +562,8 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
             c = runEnd;
         }
     }
+
+    }  // end else (DrawTextW fallback path)
 
     // ---- Pass 3: cursor ------------------------------------------------
     //

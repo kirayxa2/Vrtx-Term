@@ -62,6 +62,7 @@ public:
     // Bounding rect of the entire group, used by the caption-strip hit-tester
     // to exclude these pixels from drag.
     D2D1_RECT_F GroupBounds() const { return group_bounds_; }
+    bool IsGroupHovered()     const { return group_hovered_; }
 
 private:
     struct Disc {
@@ -75,7 +76,7 @@ private:
     const Disc* DiscAt(int x, int y) const;
 
     void DrawGlyph(ID2D1DeviceContext* dc, ID2D1SolidColorBrush* brush,
-                   ID2D1Factory* factory, const Disc& disc) const;
+                   ID2D1Factory* factory, const Disc& disc, float alpha) const;
 
     std::array<Disc, 3> discs_{};
     D2D1_RECT_F         group_bounds_{};
@@ -94,6 +95,19 @@ private:
 
     bool          group_hovered_{false};
     TrafficAction pressed_{TrafficAction::None};
+
+    // Glyph fade: 0.0 = invisible, 1.0 = fully visible.
+    // Driven by the window's traffic-light timer (60 Hz).
+    // The Render() method reads this value directly instead of
+    // doing a hard on/off based on group_hovered_.
+    mutable float glyph_alpha_{0.0f};
+
+public:
+    // Called by BorderlessWindow::OnTrafficTimer() every ~16ms.
+    // Returns true while the animation is still running.
+    bool TickGlyphFade(bool targetVisible, float dt);
+    float GlyphAlpha() const { return glyph_alpha_; }
+private:
 };
 
 }  // namespace vrtx::ui

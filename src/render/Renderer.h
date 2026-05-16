@@ -35,6 +35,7 @@
 #include "ui/CaptionButton.h"
 #include "ui/CaptionMenu.h"
 #include "ui/SettingsView.h"
+#include "ui/TabBar.h"
 #include "ui/TrafficLights.h"
 
 namespace vrtx::render {
@@ -66,6 +67,8 @@ public:
 
     // Paint one frame.
     void Render(bool windowActive,
+                bool cursorVisible,
+                ui::TabBar&        tabBar,
                 ui::TrafficLights& trafficLights,
                 ui::CaptionButton& captionButton,
                 ui::CaptionMenu&   captionMenu,

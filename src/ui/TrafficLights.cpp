@@ -129,6 +129,16 @@ TrafficAction TrafficLights::OnLButtonUp(int x, int y) {
     return firing;
 }
 
+bool TrafficLights::TickGlyphFade(bool targetVisible, float dt) {
+    // Fade speed: ~120ms in, ~100ms out — matches macOS timing.
+    const float speed = targetVisible ? (1.0f / 0.12f) : (1.0f / 0.10f);
+    const float target = targetVisible ? 1.0f : 0.0f;
+    const float delta  = (target - glyph_alpha_) * speed * dt;
+    glyph_alpha_ = std::clamp(glyph_alpha_ + delta, 0.0f, 1.0f);
+    // Still animating if not yet at target.
+    return std::abs(glyph_alpha_ - target) > 0.005f;
+}
+
 void TrafficLights::Render(ID2D1DeviceContext* dc, ID2D1SolidColorBrush* brush,
                            ID2D1Factory* factory, bool windowActive) const {
     const auto& pal = theme::ActivePalette();
@@ -147,9 +157,9 @@ void TrafficLights::Render(ID2D1DeviceContext* dc, ID2D1SolidColorBrush* brush,
         brush->SetColor(ToD2D(rim));
         dc->DrawEllipse(ellipse, brush, 1.0f);
 
-        // Hover glyphs.
-        if (group_hovered_ && windowActive) {
-            DrawGlyph(dc, brush, factory, d);
+        // Hover glyphs — animated fade via glyph_alpha_.
+        if (glyph_alpha_ > 0.005f && windowActive) {
+            DrawGlyph(dc, brush, factory, d, glyph_alpha_);
         }
     }
 }
@@ -157,8 +167,11 @@ void TrafficLights::Render(ID2D1DeviceContext* dc, ID2D1SolidColorBrush* brush,
 void TrafficLights::DrawGlyph(ID2D1DeviceContext* dc,
                               ID2D1SolidColorBrush* brush,
                               ID2D1Factory* factory,
-                              const Disc& d) const {
-    brush->SetColor(ToD2D(theme::ActivePalette().tlGlyph));
+                              const Disc& d,
+                              float alpha) const {
+    auto g = theme::ActivePalette().tlGlyph;
+    g.a *= alpha;  // apply fade
+    brush->SetColor(ToD2D(g));
 
     const float r       = d.radius;
     const float thickness = std::max(1.0f, r * 0.22f);

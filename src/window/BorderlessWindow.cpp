@@ -31,6 +31,14 @@ constexpr UINT     kAlertTimerPeriod = 16;
 constexpr UINT_PTR kSettingsTimerId     = 0x5354u;   // 'ST'
 constexpr UINT     kSettingsTimerPeriod = 16;
 
+// Traffic-lights glyph fade timer id.
+constexpr UINT_PTR kTrafficTimerId     = 0x544Cu;   // 'TL'
+constexpr UINT     kTrafficTimerPeriod = 16;
+
+// Cursor blink timer: 530ms on/off (macOS default).
+constexpr UINT_PTR kCursorBlinkTimerId    = 0x4342u;   // 'CB'
+constexpr UINT     kCursorBlinkPeriod     = 530;
+
 // Get per-monitor DPI; falls back to 96 only on pre-1607 systems.
 UINT GetWindowDpiSafe(HWND hwnd) {
     using PFN = UINT(WINAPI*)(HWND);
@@ -151,6 +159,12 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     RelayoutCaptionMenu();
     Trace("caption-menu layout done");
 
+    // Initialise with a single default tab.
+    tab_bar_.SetTabs({{L"bash", true}}, 0);
+
+    RelayoutTabBar();
+    Trace("tab-bar layout done");
+
     RelayoutAppAlert();
     Trace("app-alert layout done");
 
@@ -188,6 +202,8 @@ void BorderlessWindow::SetSession(terminal::TerminalSession* s) {
             ::PostMessageW(hwndCopy, WM_APP_PTY_DIRTY, 0, 0);
         });
         SyncPtyToSize();
+        // Start cursor blink.
+        ResetCursorBlink();
     }
 }
 
@@ -232,6 +248,7 @@ void BorderlessWindow::OnDpiChanged(UINT newDpi, const RECT* suggested) {
         caption_button_.UpdateLayout(sqW, dpi_);
     }
     RelayoutCaptionMenu();
+    RelayoutTabBar();
     RelayoutAppAlert();
     RelayoutSettings();
     ::InvalidateRect(hwnd_, nullptr, FALSE);
@@ -306,6 +323,33 @@ void BorderlessWindow::OnSettingsTimer() {
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
+void BorderlessWindow::OnTrafficTimer() {
+    // dt in seconds for the fade calculation (~16ms per tick at 60Hz).
+    constexpr float kDt = kTrafficTimerPeriod / 1000.0f;
+    const bool hovered = traffic_.IsGroupHovered();
+    const bool stillAnimating = traffic_.TickGlyphFade(hovered, kDt);
+    if (!stillAnimating) {
+        ::KillTimer(hwnd_, traffic_timer_id_);
+        traffic_timer_id_ = 0;
+    }
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void BorderlessWindow::OnCursorBlinkTimer() {
+    cursor_visible_ = !cursor_visible_;
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void BorderlessWindow::ResetCursorBlink() {
+    // Make cursor immediately visible and restart the blink cycle.
+    cursor_visible_ = true;
+    if (cursor_blink_timer_id_) {
+        ::KillTimer(hwnd_, cursor_blink_timer_id_);
+    }
+    cursor_blink_timer_id_ = ::SetTimer(hwnd_, kCursorBlinkTimerId,
+                                         kCursorBlinkPeriod, nullptr);
+}
+
 // ---------------------------------------------------------------------------
 
 void BorderlessWindow::RelayoutAppAlert() {
@@ -376,6 +420,25 @@ void BorderlessWindow::RelayoutCaptionMenu() {
     const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
     const int sqW = std::max(1, static_cast<int>(rc.right - rc.left) - 2 * marginPx);
     caption_menu_.UpdateLayout(caption_button_.Bounds(), sqW, dpi_);
+}
+
+void BorderlessWindow::RelayoutTabBar() {
+    if (!hwnd_) return;
+    const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
+
+    // Right edge of traffic lights group (3 discs):
+    //   insetX + 3*diameter + 2*spacing
+    const float trafficRight =
+        theme::ToPx(theme::kTrafficLightInsetX, dpi_)
+        + 3.0f * theme::ToPx(theme::kTrafficLightDiameter, dpi_)
+        + 2.0f * theme::ToPx(theme::kTrafficLightSpacing,  dpi_)
+        + theme::ToPx(6.0f, dpi_);  // small gap
+
+    // Caption button left edge.
+    const auto& btnBounds    = caption_button_.Bounds();
+    const float captionBtnLeft = btnBounds.left - theme::ToPx(4.0f, dpi_);
+
+    tab_bar_.UpdateLayout(trafficRight, captionBtnLeft, captionPx, dpi_);
 }
 
 void BorderlessWindow::ToggleMenu() {
@@ -626,10 +689,11 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
         return HTCLIENT;
     }
     if (caption_button_.HitTest(wx, wy)) {
-        // Inside the pill - not draggable, not resize. The window proc
-        // will receive plain WM_LBUTTON* against this hit so the button
-        // handles its own click.
         return HTCLIENT;
+    }
+    if (tab_bar_.HitTest(static_cast<float>(wx), static_cast<float>(wy))) {
+        return HTCLIENT;
+    }
     }
     if (settings_.IsOpen() && settings_.HitTestDone(wx, wy)) {
         // Done pill (settings sheet's caption-strip button) - clickable,
@@ -730,6 +794,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const int sqW = std::max(1, static_cast<int>(LOWORD(lp)) - 2 * marginPx);
             caption_button_.UpdateLayout(sqW, dpi_);
             RelayoutCaptionMenu();
+            RelayoutTabBar();
             RelayoutAppAlert();
             RelayoutSettings();
             SyncPtyToSize();
@@ -842,6 +907,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                     tbuf.SnapToBottom();
                     tbuf.ClearSelection();
                 }
+                ResetCursorBlink();
                 session_->SendInput(buf, n);
                 ::InvalidateRect(hwnd_, nullptr, FALSE);
                 return 0;
@@ -864,6 +930,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                     tbuf.SnapToBottom();
                     tbuf.ClearSelection();
                 }
+                ResetCursorBlink();
                 session_->SendInput(buf, n);
                 ::InvalidateRect(hwnd_, nullptr, FALSE);
             }
@@ -887,6 +954,14 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 OnSettingsTimer();
                 return 0;
             }
+            if (wp == kTrafficTimerId) {
+                OnTrafficTimer();
+                return 0;
+            }
+            if (wp == kCursorBlinkTimerId) {
+                OnCursorBlinkTimer();
+                return 0;
+            }
             break;
 
         case WM_SETFOCUS:
@@ -900,7 +975,13 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const int wx = GET_X_LPARAM(lp) - marginPx;
             const int wy = GET_Y_LPARAM(lp) - marginPx;
             traffic_.OnMouseMove(wx, wy);
+            // Start glyph-fade timer when the group becomes hovered.
+            if (traffic_.IsGroupHovered() && traffic_timer_id_ == 0) {
+                traffic_timer_id_ = ::SetTimer(hwnd_, kTrafficTimerId,
+                                               kTrafficTimerPeriod, nullptr);
+            }
             caption_button_.OnMouseMove(wx, wy);
+            tab_bar_.OnMouseMove(static_cast<float>(wx), static_cast<float>(wy));
             caption_menu_.OnMouseMove(wx, wy);
             app_alert_.OnMouseMove(wx, wy);
             settings_.OnMouseMove(wx, wy);
@@ -924,7 +1005,13 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_MOUSELEAVE:
             traffic_.OnMouseLeave();
+            // Keep the timer running to animate the glyphs OUT.
+            if (traffic_timer_id_ == 0) {
+                traffic_timer_id_ = ::SetTimer(hwnd_, kTrafficTimerId,
+                                               kTrafficTimerPeriod, nullptr);
+            }
             caption_button_.OnMouseLeave();
+            tab_bar_.OnMouseLeave();
             caption_menu_.OnMouseLeave();
             app_alert_.OnMouseLeave();
             settings_.OnMouseLeave();
@@ -990,6 +1077,8 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 traffic_.OnLButtonDown(wx, wy);
             } else if (caption_button_.HitTest(wx, wy)) {
                 caption_button_.OnLButtonDown(wx, wy);
+            } else if (tab_bar_.HitTest(static_cast<float>(wx), static_cast<float>(wy))) {
+                // Tab bar hit — handled on up.
             } else if (IsInsideContent(wx, wy) && session_) {
                 // Begin a fresh selection at this point.
                 int viewRow = 0, col = 0;
@@ -1070,6 +1159,9 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 }
             } else if (caption_button_.HitTest(wx, wy)) {
                 caption_button_.OnLButtonUp(wx, wy);
+            } else if (tab_bar_.HitTest(static_cast<float>(wx), static_cast<float>(wy))) {
+                tab_bar_.OnLButtonUp(static_cast<float>(wx), static_cast<float>(wy));
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
             } else {
                 caption_button_.OnLButtonUp(wx, wy);
 
@@ -1138,7 +1230,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_PAINT:
-            renderer_.Render(active_, traffic_, caption_button_,
+            renderer_.Render(active_, cursor_visible_, tab_bar_, traffic_, caption_button_,
                              caption_menu_, app_alert_, settings_);
             ::ValidateRect(hwnd_, nullptr);
             return 0;

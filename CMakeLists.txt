@@ -58,6 +58,8 @@ set(VRTXTERM_SOURCES
     src/render/Renderer.cpp
     src/render/TerminalView.cpp
     src/render/BoxDrawing.cpp
+    src/render/GlyphAtlas.cpp
+    src/render/AtlasRenderer.cpp
 
     src/terminal/ConPty.cpp
     src/terminal/TermBuffer.cpp
@@ -71,6 +73,7 @@ set(VRTXTERM_SOURCES
     src/ui/CaptionMenu.cpp
     src/ui/AppAlert.cpp
     src/ui/SettingsView.cpp
+    src/ui/TabBar.cpp
 
     src/theme/AppTheme.cpp
 )
@@ -87,6 +90,8 @@ set(VRTXTERM_HEADERS
     src/render/Renderer.h
     src/render/TerminalView.h
     src/render/BoxDrawing.h
+    src/render/GlyphAtlas.h
+    src/render/AtlasRenderer.h
 
     src/terminal/ConPty.h
     src/terminal/TermBuffer.h
@@ -100,6 +105,7 @@ set(VRTXTERM_HEADERS
     src/ui/CaptionMenu.h
     src/ui/AppAlert.h
     src/ui/SettingsView.h
+    src/ui/TabBar.h
 
     src/theme/AppTheme.h
 )

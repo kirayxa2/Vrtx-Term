@@ -15,7 +15,15 @@ public:
 
 private:
     window::BorderlessWindow   window_;
-    terminal::TerminalSession  session_;
+
+    // Multi-tab session management.
+    std::vector<std::unique_ptr<terminal::TerminalSession>> sessions_;
+    int active_tab_{0};
+
+    void OpenNewTab();
+    void CloseTab(int index);
+    void SwitchTab(int index);
+    void RebuildTabBar();
 };
 
 }  // namespace vrtx::app

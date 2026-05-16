@@ -1,6 +1,7 @@
 #include "render/Renderer.h"
 
 #include "theme/AppTheme.h"
+#include "ui/TabBar.h"
 #include "window/SquircleGeometry.h"
 
 namespace vrtx::render {
@@ -82,8 +83,10 @@ void Renderer::Initialize(HWND hwnd) {
 
     EnsureSwapChain(hwnd);
 
-    // Initialise the terminal grid renderer with our DWrite factory.
-    terminal_view_.Initialize(dwrite_factory_.Get(), dpi_);
+    // Initialise the terminal grid renderer with our DWrite factory + D3D device.
+    terminal_view_.Initialize(dwrite_factory_.Get(), dpi_,
+                              d3d_device_.Get(), d3d_context_.Get(),
+                              d2d_dc_.Get());
 
     // Build the noise tile / brush once. Soft-fails if the bitmap can't
     // be created on this device - the rest of the renderer still works,
@@ -245,6 +248,8 @@ void Renderer::EnsureNoiseBrush() {
 }
 
 void Renderer::Render(bool windowActive,
+                      bool cursorVisible,
+                      ui::TabBar&        tabBar,
                       ui::TrafficLights& trafficLights,
                       ui::CaptionButton& captionButton,
                       ui::CaptionMenu&   captionMenu,
@@ -354,7 +359,7 @@ void Renderer::Render(bool windowActive,
         // Anchor the tile to the squircle origin so the pattern doesn't
         // slide around when the window is being resized.
         noise_brush_->SetTransform(D2D1::Matrix3x2F::Identity());
-        noise_brush_->SetOpacity(theme::kNoiseSurfaceAlpha);
+        noise_brush_->SetOpacity(0.0f); // noise disabled
         d2d_dc_->FillGeometry(squircle.Get(), noise_brush_.Get());
     }
 
@@ -379,13 +384,22 @@ void Renderer::Render(bool windowActive,
         D2D1_RECT_F contentRect{
             0.0f, captionPx, swW, swH,
         };
-        terminal_view_.Draw(d2d_dc_.Get(), *session_, contentRect, windowActive);
+        terminal_view_.Draw(d2d_dc_.Get(), *session_, contentRect, windowActive && cursorVisible,
+                               static_cast<float>(width_px_),
+                               static_cast<float>(height_px_),
+                               marginPx, marginPx);
     }
 
     // ---- Caption chevron-button (hidden while Settings is up) -----------
     if (drawChevron) {
         captionButton.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
                              windowActive);
+    }
+
+    // ---- Tab bar (between traffic lights and caption button) ------------
+    if (drawChevron) {
+        tabBar.Render(d2d_dc_.Get(), brush_.Get(), dwrite_factory_.Get(),
+                      windowActive);
     }
 
     // ---- App alert ------------------------------------------------------
@@ -432,7 +446,7 @@ void Renderer::Render(bool windowActive,
     // needed.
     if (noise_brush_) {
         noise_brush_->SetTransform(D2D1::Matrix3x2F::Identity());
-        noise_brush_->SetOpacity(theme::kNoiseChromeAlpha);
+        noise_brush_->SetOpacity(0.0f); // noise disabled
         const D2D1_RECT_F squircleRect{0.0f, 0.0f, swW, swH};
         d2d_dc_->FillRectangle(squircleRect, noise_brush_.Get());
     }

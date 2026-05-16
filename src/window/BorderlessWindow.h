@@ -32,6 +32,7 @@
 #include "ui/CaptionMenu.h"
 #include "ui/SettingsView.h"
 #include "ui/TrafficLights.h"
+#include "ui/TabBar.h"
 
 namespace vrtx::window {
 
@@ -53,6 +54,7 @@ public:
 
     // Access the caption "more" button to attach the user-supplied click
     // handler from outside (e.g. Application::Run).
+    ui::TabBar&      GetTabBar()        { return tab_bar_; }
     ui::CaptionButton& GetCaptionButton() { return caption_button_; }
     ui::CaptionMenu&   GetCaptionMenu()   { return caption_menu_; }
     ui::AppAlert&      GetAppAlert()      { return app_alert_; }
@@ -68,6 +70,9 @@ public:
     // Open / close the Settings sheet with animation.
     void ShowSettings();
     void HideSettings();
+
+    // Re-layout the tab bar (call after SetTabs from outside).
+    void RelayoutTabBar();
 
 private:
     static LRESULT CALLBACK StaticWndProc(HWND, UINT, WPARAM, LPARAM);
@@ -113,6 +118,7 @@ private:
 
     render::Renderer            renderer_;
     ui::TrafficLights           traffic_;
+    ui::TabBar                  tab_bar_;
     ui::CaptionButton           caption_button_;
     ui::CaptionMenu             caption_menu_;
     ui::AppAlert                app_alert_;
@@ -163,6 +169,19 @@ private:
     void StartSettingsAnimation(float target);
     void OnSettingsTimer();
     void RelayoutSettings();
+
+    // ---- Traffic lights glyph-fade animation -------------------------
+    UINT_PTR traffic_timer_id_{0};
+
+    void OnTrafficTimer();
+
+    // ---- Cursor blink ---------------------------------------------------
+    // macOS cursor blink: 530ms on / 530ms off.
+    UINT_PTR cursor_blink_timer_id_{0};
+    bool     cursor_visible_{true};   // current blink state
+
+    void OnCursorBlinkTimer();
+    void ResetCursorBlink();  // call on any keystroke to make cursor visible
 };
 
 }  // namespace vrtx::window
