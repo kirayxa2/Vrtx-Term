@@ -89,7 +89,7 @@ inline constexpr float kTrafficLightInsetX   = 11.0f;
 // button looks slightly too high relative to the visual centre of the
 // caption strip.
 inline constexpr float kCaptionButtonDiameter = 28.0f;
-inline constexpr float kCaptionButtonInsetX   = 4.0f;
+inline constexpr float kCaptionButtonInsetX   = 2.0f;
 inline constexpr float kCaptionButtonOffsetY  = 1.0f;
 
 // Default initial window size in logical pt.
