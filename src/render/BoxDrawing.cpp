@@ -150,9 +150,15 @@ bool DrawBlock(ID2D1DeviceContext* dc,
 }
 
 // Rounded corners: U+256D..U+2570. Drawn as a stroked path:
-// "leg straight to start of arc -> 90 deg quarter-circle -> leg straight
-// to opposite cell edge". Stroke width = lightPx so the result joins
-// pixel-perfect with neighbouring straight cells of the same weight.
+// "leg straight to start of arc -> cubic-bezier quarter-circle -> leg
+// straight to opposite cell edge". We use a cubic Bezier with the
+// classic K = 4*(sqrt(2)-1)/3 ~= 0.5523 control-point offset, which
+// approximates a true quarter-circle to within ~0.02% error and
+// removes any ambiguity about sweep direction (a Bezier's shape is
+// fully determined by its 4 control points).
+//
+// Stroke width = lightPx so the curve joins pixel-perfect with
+// neighbouring straight box cells of the same weight.
 bool DrawRoundedCorner(ID2D1DeviceContext* dc,
                        ID2D1SolidColorBrush* brush,
                        D2D1_RECT_F cell,
@@ -172,58 +178,66 @@ bool DrawRoundedCorner(ID2D1DeviceContext* dc,
 
     const float cx = (cell.left + cell.right)  * 0.5f;
     const float cy = (cell.top  + cell.bottom) * 0.5f;
-    // Radius is roughly 35% of the smaller half-cell, which gives a
-    // visibly rounded but not exaggerated curve at typical font sizes.
+    // Curve radius ~ 45% of the smaller half-cell. Smaller than before
+    // (was 70%) so the rounding is visible but not exaggerated, which
+    // matches how kitty/alacritty/iTerm draw these glyphs.
     const float halfMin = std::min(cell.right - cx, cell.bottom - cy);
-    const float R = std::max(2.0f, halfMin * 0.7f);
+    const float R = std::max(2.0f, halfMin * 0.45f);
 
-    D2D1_POINT_2F start{}, mid_before{}, mid_after{}, finish{};
-    D2D1_SWEEP_DIRECTION sweep = D2D1_SWEEP_DIRECTION_CLOCKWISE;
+    // Bezier offset for a 90 deg arc of radius R.
+    constexpr float kQuarterCircleK = 0.5522847498307933f;
+    const float K = R * kQuarterCircleK;
 
-    // Geometry per glyph. The "horizontal leg" runs from the matching
-    // cell edge to (cx +/- R, cy); the arc curves into the corner; the
-    // "vertical leg" runs from (cx, cy +/- R) to the opposite edge.
+    D2D1_POINT_2F start{}, p0{}, p1{}, p2{}, p3{}, finish{};
+
     switch (cp) {
-        case 0x256D:  // ╭  east leg + south leg, curve in top-left direction
-            start      = {cell.right,  cy};
-            mid_before = {cx + R,      cy};
-            mid_after  = {cx,          cy + R};
-            finish     = {cx,          cell.bottom};
-            sweep      = D2D1_SWEEP_DIRECTION_CLOCKWISE;
+        case 0x256D: {  // ╭  east leg + south leg, curve bulging toward top-left
+            // East leg: cell.right -> (cx+R, cy)
+            // Arc: (cx+R, cy) -> (cx, cy+R), tangents west then south
+            // South leg: (cx, cy+R) -> (cx, cell.bottom)
+            start  = {cell.right, cy};
+            p0     = {cx + R,     cy};
+            p1     = {cx + R - K, cy};         // pull west
+            p2     = {cx,         cy + R - K}; // pull up (arrive going south)
+            p3     = {cx,         cy + R};
+            finish = {cx,         cell.bottom};
             break;
-        case 0x256E:  // ╮  west leg + south leg, curve in top-right direction
-            start      = {cell.left,   cy};
-            mid_before = {cx - R,      cy};
-            mid_after  = {cx,          cy + R};
-            finish     = {cx,          cell.bottom};
-            sweep      = D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE;
+        }
+        case 0x256E: {  // ╮  west leg + south leg, curve bulging toward top-right
+            start  = {cell.left,  cy};
+            p0     = {cx - R,     cy};
+            p1     = {cx - R + K, cy};         // pull east
+            p2     = {cx,         cy + R - K}; // pull up
+            p3     = {cx,         cy + R};
+            finish = {cx,         cell.bottom};
             break;
-        case 0x256F:  // ╯  west leg + north leg, curve in bottom-right direction
-            start      = {cell.left,   cy};
-            mid_before = {cx - R,      cy};
-            mid_after  = {cx,          cy - R};
-            finish     = {cx,          cell.top};
-            sweep      = D2D1_SWEEP_DIRECTION_CLOCKWISE;
+        }
+        case 0x256F: {  // ╯  west leg + north leg, curve bulging toward bottom-right
+            start  = {cell.left,  cy};
+            p0     = {cx - R,     cy};
+            p1     = {cx - R + K, cy};         // pull east
+            p2     = {cx,         cy - R + K}; // pull down (arrive going north)
+            p3     = {cx,         cy - R};
+            finish = {cx,         cell.top};
             break;
-        case 0x2570:  // ╰  east leg + north leg, curve in bottom-left direction
-            start      = {cell.right,  cy};
-            mid_before = {cx + R,      cy};
-            mid_after  = {cx,          cy - R};
-            finish     = {cx,          cell.top};
-            sweep      = D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE;
+        }
+        case 0x2570: {  // ╰  east leg + north leg, curve bulging toward bottom-left
+            start  = {cell.right, cy};
+            p0     = {cx + R,     cy};
+            p1     = {cx + R - K, cy};         // pull west
+            p2     = {cx,         cy - R + K}; // pull down
+            p3     = {cx,         cy - R};
+            finish = {cx,         cell.top};
             break;
+        }
         default:
             sink->Close();
             return false;
     }
 
     sink->BeginFigure(start, D2D1_FIGURE_BEGIN_HOLLOW);
-    sink->AddLine(mid_before);
-    sink->AddArc(D2D1::ArcSegment(mid_after,
-                                  D2D1::SizeF(R, R),
-                                  /*rotationAngle=*/0.0f,
-                                  sweep,
-                                  D2D1_ARC_SIZE_SMALL));
+    sink->AddLine(p0);
+    sink->AddBezier(D2D1::BezierSegment(p1, p2, p3));
     sink->AddLine(finish);
     sink->EndFigure(D2D1_FIGURE_END_OPEN);
     sink->Close();
