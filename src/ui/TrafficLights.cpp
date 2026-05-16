@@ -27,8 +27,11 @@ void TrafficLights::UpdateLayout(UINT dpi) {
     const float insetX   = ToPx(kTrafficLightInsetX,   dpi) + x_shift_px_;
     const float captionH = ToPx(kCaptionHeight,        dpi);
 
-    // Vertically centre the disc row inside the caption strip.
-    const float centerY = captionH * 0.5f;
+    // Vertically centre the disc row inside the caption strip, plus
+    // any caller-supplied Y-shift (used by the Settings sheet to
+    // float the lights down into the sidebar pill instead of hugging
+    // the pill's top edge).
+    const float centerY = captionH * 0.5f + y_shift_px_;
 
     const auto& pal = ActivePalette();
 
@@ -74,6 +77,12 @@ void TrafficLights::SetXShift(float pxOffset) {
     x_shift_px_ = pxOffset;
     // Re-layout against the cached DPI; UpdateLayout() reads x_shift_px_
     // when computing insetX, so this picks up the new offset.
+    UpdateLayout(layout_dpi_);
+}
+
+void TrafficLights::SetYShift(float pxOffset) {
+    if (std::abs(y_shift_px_ - pxOffset) < 0.5f) return;
+    y_shift_px_ = pxOffset;
     UpdateLayout(layout_dpi_);
 }
 

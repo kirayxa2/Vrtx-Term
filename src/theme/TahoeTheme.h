@@ -190,6 +190,17 @@ inline constexpr float kSettingsOuterPaddingBot   =  6.0f;   // squircle bottom 
 // outside the pill's 16pt corner curve when the pill starts at
 // kSettingsOuterPaddingLeft (8pt).
 inline constexpr float kSettingsTrafficShiftX     = 12.0f;
+
+// Same idea, vertically. By default the discs are centred in the
+// caption strip (y = captionH/2). When Settings is open the pill's
+// top edge sits at squircle.top + kSettingsOuterPaddingTop (6pt) and
+// the eye reads the discs as glued to the pill top.
+//
+// 5pt nudges the disc centre down so there's roughly the same
+// breathing room above each disc as on its sides, matching how
+// Apple's macOS Tahoe System Settings spaces the lights inside the
+// sidebar header.
+inline constexpr float kSettingsTrafficShiftY     =  5.0f;
 inline constexpr float kSettingsSidebarGap        = 12.0f;   // sidebar pill -> content
 inline constexpr float kSettingsSidebarRadius     = kWindowCornerRadius; // 16pt - matches window
 inline constexpr float kSettingsRowHeight         = 32.0f;

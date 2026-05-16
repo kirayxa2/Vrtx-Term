@@ -51,13 +51,13 @@ public:
     void Render(ID2D1DeviceContext* dc, ID2D1SolidColorBrush* brush,
                 ID2D1Factory* factory, bool windowActive) const;
 
-    // Apply an additional horizontal shift to the disc row, in physical
-    // pixels. Used when the Settings sheet is open: the sidebar pill
-    // begins close to the squircle's left edge with a 16pt rounded
-    // corner, so the lights need a couple of px to clear the corner
-    // and not look glued to it. Pass 0 to restore the default
-    // placement.
+    // Apply an additional offset to the disc row, in physical pixels.
+    // Used when the Settings sheet is open: the sidebar pill begins
+    // close to the squircle's left edge with a 16pt rounded corner,
+    // so the lights need a couple of px to clear the corner and not
+    // look glued to it. Pass 0 to restore the default placement.
     void SetXShift(float pxOffset);
+    void SetYShift(float pxOffset);
 
     // Bounding rect of the entire group, used by the caption-strip hit-tester
     // to exclude these pixels from drag.
@@ -85,11 +85,12 @@ private:
     // it again.
     UINT  layout_dpi_{96};
 
-    // Extra horizontal offset added to the disc row's base X (physical
-    // pixels). Persists across UpdateLayout() calls so the host doesn't
-    // have to re-apply it after every resize / DPI change. Reset
-    // explicitly via SetXShift(0.0f).
+    // Extra offsets added to the disc row's base position (physical
+    // pixels). Persist across UpdateLayout() calls so the host doesn't
+    // have to re-apply them after every resize / DPI change. Reset
+    // explicitly via SetXShift(0) / SetYShift(0).
     float x_shift_px_{0.0f};
+    float y_shift_px_{0.0f};
 
     bool          group_hovered_{false};
     TrafficAction pressed_{TrafficAction::None};
