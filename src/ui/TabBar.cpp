@@ -11,8 +11,8 @@ namespace {
 // Slightly shorter than before so the strip reads as compact and the
 // label/close-x have room to breathe without crowding the 28pt strip.
 constexpr float kTabPillH       = 18.0f;   // pill height
-constexpr float kTabMinW        = 68.0f;   // minimum pill width (room for label)
-constexpr float kTabMaxW        = 168.0f;  // maximum pill width
+constexpr float kTabMinW        = 44.0f;   // minimum pill width (room for label)
+constexpr float kTabMaxW        = 144.0f;  // maximum pill width
 constexpr float kTabGap         = 4.0f;    // gap between pills
 constexpr float kTabFontSize    = 11.0f;   // label font size
 constexpr float kPillRadius     = 5.0f;    // corner radius
