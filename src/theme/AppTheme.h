@@ -56,6 +56,18 @@ inline constexpr float kShadowAlpha    =  0.30f;
 // Height of the draggable caption strip at the top of the window.
 inline constexpr float kCaptionHeight = 31.0f;
 
+// Tab strip sits in its own band below the caption, above the
+// terminal grid. The native macOS Terminal uses ~28pt for this band.
+// The whole strip is draggable everywhere except the tab pills and
+// the "+" button.
+inline constexpr float kTabStripHeight    = 28.0f;
+inline constexpr float kTabStripPaddingX  =  8.0f;   // squircle edge -> first pill / "+" group
+inline constexpr float kTabStripDividerY  =  0.5f;   // 1px hairline between strip and terminal
+
+// Caption-strip title (e.g. "user — bash — 80×24"), centred horizontally.
+// Sized close to the macOS native caption title (~13pt SemiBold).
+inline constexpr float kCaptionTitleSize  = 13.0f;
+
 // Resize border thickness for hit-testing.
 inline constexpr float kResizeBorder = 6.0f;
 
@@ -365,6 +377,16 @@ struct Palette {
     Color captionMenuText;          // label + icon colour
     Color captionMenuTextMuted;     // for "About" footer style if needed
 
+    // Caption-strip centred title ("user — bash — 80×24"). Slightly
+    // muted in the inactive window state; the renderer fades alpha
+    // when the window is not the foreground.
+    Color captionTitle;
+    Color captionTitleMuted;
+
+    // Tab strip (the band below the caption, above the terminal).
+    Color tabStripBg;            // strip fill
+    Color tabStripDivider;       // 1pt hairline at strip bottom
+
     // In-window alert / dialog (replaces native MessageBoxW). Drawn in
     // our own chrome so dialogs feel like a continuation of the window
     // rather than a foreign Win32 surface.
@@ -458,6 +480,11 @@ inline constexpr Palette kDarkPalette{
     .captionMenuText         = Color::FromARGB(0xFFEDEDEF),
     .captionMenuTextMuted    = Color::FromARGB(0x99EDEDEF),
 
+    .captionTitle      = Color::FromARGB(0xCCEDEDEF),
+    .captionTitleMuted = Color::FromARGB(0x66EDEDEF),
+    .tabStripBg        = Color::FromARGB(0x14000000),
+    .tabStripDivider   = Color::FromARGB(0x22FFFFFF),
+
     // System-blue accent in dark mode is brighter than in light to keep
     // contrast against the panel fill.
     .alertScrim       = Color::FromARGB(0x80000000),
@@ -544,6 +571,11 @@ inline constexpr Palette kLightPalette{
     .captionMenuRowHover     = Color::FromARGB(0x14000000),
     .captionMenuText         = Color::FromARGB(0xFF1A1A1C),
     .captionMenuTextMuted    = Color::FromARGB(0x991A1A1C),
+
+    .captionTitle      = Color::FromARGB(0xCC1A1A1C),
+    .captionTitleMuted = Color::FromARGB(0x661A1A1C),
+    .tabStripBg        = Color::FromARGB(0x14000000),
+    .tabStripDivider   = Color::FromARGB(0x22000000),
 
     .alertScrim       = Color::FromARGB(0x66000000),
     .alertPanelFill   = Color::FromARGB(0xDDFFFFFF),

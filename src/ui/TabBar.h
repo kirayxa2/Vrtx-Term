@@ -32,11 +32,13 @@ public:
     void SetOnClose   (CloseTabHandler h) { on_close_     = std::move(h); }
     void SetOnSwitch  (SwitchHandler   h) { on_switch_    = std::move(h); }
 
-    // Rebuild layout after resize / DPI change.
-    // `leftEdgePx`  = right edge of the traffic-lights area (in squircle-local px)
-    // `rightEdgePx` = left edge of the caption button (in squircle-local px)
-    void UpdateLayout(float leftEdgePx, float rightEdgePx,
-                      float captionHeightPx, UINT dpi);
+    // Rebuild layout for a tab strip occupying the rect `stripRect`
+    // (squircle-local physical pixels). The pills + "+" group is
+    // centred horizontally inside the strip.
+    void UpdateLayout(D2D1_RECT_F stripRect, UINT dpi);
+
+    // Strip rect (for the renderer to fill the background).
+    D2D1_RECT_F StripRect() const { return strip_rect_; }
 
     // Replace the tab list. Index `activeIdx` is the selected tab.
     void SetTabs(std::vector<Tab> tabs, int activeIdx);
@@ -74,9 +76,7 @@ private:
     bool              hover_plus_{false};
 
     // Layout data saved for RebuildPills after SetTabs.
-    float left_edge_px_{0};
-    float right_edge_px_{0};
-    float caption_h_px_{31.0f};
+    D2D1_RECT_F strip_rect_{};
     UINT  dpi_{96};
 
     // "+" button rect.

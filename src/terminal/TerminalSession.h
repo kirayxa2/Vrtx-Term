@@ -58,6 +58,11 @@ public:
 
     bool Running() const { return pty_.Running(); }
 
+    // The shell binary actually launched (full path). Used for the
+    // caption-strip title ("user — bash — 80×24"). Returns an empty
+    // string if Start() has not been called yet.
+    const std::wstring& ShellPath() const { return pty_.ShellPath(); }
+
     void Stop();
 
 private:

@@ -85,6 +85,10 @@ private:
     void RecreateBackBufferTarget();
     void EnsureNoiseBrush();
 
+    // Build the centred caption title ("user — bash — 80×24") into a
+    // cached IDWriteTextLayout. Re-built lazily when the inputs change.
+    void EnsureTitleLayout(int cols, int rows);
+
     HWND hwnd_{nullptr};
 
     UINT dpi_       {96};
@@ -132,6 +136,16 @@ private:
     // Terminal grid renderer (owns DWrite text formats).
     TerminalView terminal_view_;
     terminal::TerminalSession* session_{nullptr};
+
+    // Cached caption title layout. Recomputed when any of (username,
+    // shell exe basename, cols, rows, dpi) changes.
+    ComPtr<IDWriteTextFormat> title_fmt_;
+    ComPtr<IDWriteTextLayout> title_layout_;
+    std::wstring              cached_username_;     // resolved once at Initialize()
+    std::wstring              cached_shell_;        // basename of session_->ShellPath()
+    int                       cached_title_cols_{0};
+    int                       cached_title_rows_{0};
+    UINT                      cached_title_dpi_{0};
 };
 
 }  // namespace vrtx::render

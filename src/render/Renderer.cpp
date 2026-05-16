@@ -4,12 +4,39 @@
 #include "ui/TabBar.h"
 #include "window/SquircleGeometry.h"
 
+#include <lmcons.h>   // UNLEN
+
 namespace vrtx::render {
 
 namespace {
 
 inline D2D1::ColorF ToD2D(theme::Color c) {
     return D2D1::ColorF(c.r, c.g, c.b, c.a);
+}
+
+// Shell-binary basename without extension. "C:\\WINDOWS\\System32\\cmd.exe"
+// becomes "cmd"; "pwsh.exe" stays "pwsh"; an empty path falls back to
+// "shell" so the title isn't blank during early startup.
+std::wstring ShellBasename(const std::wstring& path) {
+    if (path.empty()) return L"shell";
+    auto slash = path.find_last_of(L"\\/");
+    std::wstring base = (slash == std::wstring::npos)
+                            ? path : path.substr(slash + 1);
+    auto dot = base.find_last_of(L'.');
+    if (dot != std::wstring::npos) base.erase(dot);
+    // Make pretty: powershell -> PowerShell would be nice but we stay
+    // verbatim. The cases the user actually sees are pwsh / powershell /
+    // cmd / bash, all already short and lowercase.
+    return base.empty() ? L"shell" : base;
+}
+
+std::wstring GetCurrentUsernameW() {
+    wchar_t buf[UNLEN + 1] = {};
+    DWORD len = UNLEN + 1;
+    if (::GetUserNameW(buf, &len) && len > 0) {
+        return std::wstring(buf, len > 0 ? len - 1 : 0);
+    }
+    return L"user";
 }
 
 }  // namespace
@@ -93,6 +120,10 @@ void Renderer::Initialize(HWND hwnd) {
     // we just lose the frosted grain.
     EnsureNoiseBrush();
 
+    // Username is fixed for the process lifetime; cache it once so the
+    // caption title doesn't have to call into LSA on every paint.
+    cached_username_ = GetCurrentUsernameW();
+
     ThrowIfFailed(dcomp_target_->SetRoot(dcomp_visual_.Get()),
                   "IDCompositionTarget::SetRoot");
     ThrowIfFailed(dcomp_device_->Commit(), "IDCompositionDevice::Commit");
@@ -102,15 +133,20 @@ void Renderer::SetDpi(UINT dpi) {
     if (dpi == dpi_) return;
     dpi_ = dpi;
     terminal_view_.OnDpiChanged(dpi);
+    // Title font size is DPI-dependent; force a rebuild on next paint.
+    title_fmt_.Reset();
+    title_layout_.Reset();
+    cached_title_dpi_ = 0;
 }
 
 void Renderer::GridForCurrentSize(int& cols, int& rows) const {
-    const float marginPx  = theme::ToPx(theme::kShadowMargin,  dpi_);
-    const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
+    const float marginPx  = theme::ToPx(theme::kShadowMargin,    dpi_);
+    const float captionPx = theme::ToPx(theme::kCaptionHeight,   dpi_);
+    const float stripPx   = theme::ToPx(theme::kTabStripHeight,  dpi_);
     const float swW = std::max(1.0f, static_cast<float>(width_px_)  - 2.0f * marginPx);
     const float swH = std::max(1.0f, static_cast<float>(height_px_) - 2.0f * marginPx);
     const float contentW = swW;
-    const float contentH = std::max(1.0f, swH - captionPx);
+    const float contentH = std::max(1.0f, swH - captionPx - stripPx);
     terminal_view_.GridForContent(contentW, contentH, cols, rows);
 }
 
@@ -380,14 +416,64 @@ void Renderer::Render(bool windowActive,
 
     // ---- Terminal grid ---------------------------------------------------
     if (session_ && drawTerminal) {
-        const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
+        const float captionPx = theme::ToPx(theme::kCaptionHeight,   dpi_);
+        const float stripPx   = theme::ToPx(theme::kTabStripHeight,  dpi_);
         D2D1_RECT_F contentRect{
-            0.0f, captionPx, swW, swH,
+            0.0f, captionPx + stripPx, swW, swH,
         };
         terminal_view_.Draw(d2d_dc_.Get(), *session_, contentRect, windowActive && cursorVisible,
                                static_cast<float>(width_px_),
                                static_cast<float>(height_px_),
                                marginPx, marginPx);
+    }
+
+    // ---- Caption strip title ("user — bash — 80×24") -------------------
+    //
+    // Drawn before the caption-button / tab strip so they overlap us
+    // visually if the title runs into the caption button or the
+    // traffic-lights area at very narrow widths. Hidden while Settings
+    // is up, mirroring how the chevron-button hides.
+    if (drawChevron && session_) {
+        const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
+        int cols = 0, rows = 0;
+        terminal_view_.GridForContent(swW, swH - captionPx
+                                          - theme::ToPx(theme::kTabStripHeight, dpi_),
+                                      cols, rows);
+        if (cols != cached_title_cols_ || rows != cached_title_rows_ ||
+            dpi_ != cached_title_dpi_  || !title_layout_) {
+            EnsureTitleLayout(cols, rows);
+        }
+        if (title_layout_) {
+            DWRITE_TEXT_METRICS tm{};
+            title_layout_->GetMetrics(&tm);
+            const float titleX = (swW - tm.width) * 0.5f;
+            const float titleY = (captionPx - tm.height) * 0.5f;
+            brush_->SetColor(ToD2D(windowActive ? pal.captionTitle
+                                                : pal.captionTitleMuted));
+            d2d_dc_->DrawTextLayout(D2D1::Point2F(titleX, titleY),
+                                    title_layout_.Get(), brush_.Get(),
+                                    D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        }
+    }
+
+    // ---- Tab strip background + divider --------------------------------
+    if (drawChevron) {
+        const float captionPx = theme::ToPx(theme::kCaptionHeight,  dpi_);
+        const float stripPx   = theme::ToPx(theme::kTabStripHeight, dpi_);
+        const D2D1_RECT_F stripRect{0.0f, captionPx, swW, captionPx + stripPx};
+        brush_->SetColor(ToD2D(pal.tabStripBg));
+        d2d_dc_->FillRectangle(stripRect, brush_.Get());
+
+        // 1px hairline along the strip's bottom edge.
+        const float divPx = std::max(1.0f, theme::ToPx(theme::kTabStripDividerY, dpi_));
+        const D2D1_RECT_F divider{
+            0.0f,
+            stripRect.bottom - divPx,
+            swW,
+            stripRect.bottom,
+        };
+        brush_->SetColor(ToD2D(pal.tabStripDivider));
+        d2d_dc_->FillRectangle(divider, brush_.Get());
     }
 
     // ---- Caption chevron-button (hidden while Settings is up) -----------
@@ -493,6 +579,53 @@ void Renderer::Render(bool windowActive,
 
     // Tell the compositor a new frame is ready.
     dcomp_device_->Commit();
+}
+
+// ---------------------------------------------------------------------------
+
+void Renderer::EnsureTitleLayout(int cols, int rows) {
+    cached_title_cols_ = cols;
+    cached_title_rows_ = rows;
+    cached_title_dpi_  = dpi_;
+    title_layout_.Reset();
+
+    if (session_) {
+        cached_shell_ = ShellBasename(session_->ShellPath());
+    } else {
+        cached_shell_ = L"shell";
+    }
+
+    if (!title_fmt_ && dwrite_factory_) {
+        const float fontPx = theme::ToPx(theme::kCaptionTitleSize, dpi_);
+        dwrite_factory_->CreateTextFormat(
+            theme::kTerminalFontFamily, nullptr,
+            DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL,
+            fontPx, L"en-us", title_fmt_.GetAddressOf());
+        if (title_fmt_) {
+            title_fmt_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+            title_fmt_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            title_fmt_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+    }
+    if (!title_fmt_ || !dwrite_factory_) return;
+
+    // Compose: "<user> — <shell> — <cols>×<rows>". The em-dash matches
+    // macOS Terminal exactly. We use the unicode multiplication sign ×
+    // (U+00D7) for the grid-size separator, also matching macOS.
+    wchar_t sizeBuf[32];
+    std::swprintf(sizeBuf, 32, L"%d\u00D7%d", std::max(1, cols), std::max(1, rows));
+    std::wstring text = cached_username_;
+    text += L" \u2014 ";
+    text += cached_shell_;
+    text += L" \u2014 ";
+    text += sizeBuf;
+
+    dwrite_factory_->CreateTextLayout(
+        text.c_str(), static_cast<UINT32>(text.size()),
+        title_fmt_.Get(),
+        /*maxWidth=*/16384.0f, /*maxHeight=*/4096.0f,
+        title_layout_.GetAddressOf());
 }
 
 }  // namespace vrtx::render

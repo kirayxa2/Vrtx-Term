@@ -26,12 +26,9 @@ constexpr float kPlusGap        =  5.0f;   // gap between last pill and "+"
 
 // ---------------------------------------------------------------------------
 
-void TabBar::UpdateLayout(float leftEdgePx, float rightEdgePx,
-                          float captionHeightPx, UINT dpi) {
-    left_edge_px_  = leftEdgePx;
-    right_edge_px_ = rightEdgePx;
-    caption_h_px_  = captionHeightPx;
-    dpi_           = dpi;
+void TabBar::UpdateLayout(D2D1_RECT_F stripRect, UINT dpi) {
+    strip_rect_ = stripRect;
+    dpi_        = dpi;
     RebuildPills();
 }
 
@@ -64,42 +61,41 @@ void TabBar::RebuildPills() {
     const float plusGapPx = theme::ToPx(kPlusGap,   dpi_);
     const float closeSzPx = theme::ToPx(kCloseSize, dpi_);
     const float closeMarPx= theme::ToPx(kCloseMargin, dpi_);
+    const float padXPx    = theme::ToPx(theme::kTabStripPaddingX, dpi_);
 
-    // Reserve space for the "+" button on the right.
-    const float available  = right_edge_px_ - left_edge_px_
-                             - plusSzPx - plusGapPx;
+    const float stripW = std::max(1.0f, strip_rect_.right - strip_rect_.left);
+    const float stripH = std::max(1.0f, strip_rect_.bottom - strip_rect_.top);
+
+    // Reserve space for the "+" button on the right and side padding.
+    const float available  = stripW - 2.0f * padXPx - plusSzPx - plusGapPx;
     const float totalGaps  = gapPx * (n - 1);
     const float pillW      = std::clamp((available - totalGaps) / n,
                                         minWPx, maxWPx);
 
-    // Centre the pill row in the available span (excluding "+").
-    const float rowW   = pillW * n + totalGaps;
-    // Align pills starting from left_edge_px_ with some centering.
-    const float startX = left_edge_px_
-                         + ((available - rowW) * 0.5f);
-    const float pillY  = (caption_h_px_ - pillHPx) * 0.5f;
+    // Pills are left-aligned inside the strip (macOS Terminal style).
+    const float startX = strip_rect_.left + padXPx;
+    const float pillY  = strip_rect_.top + (stripH - pillHPx) * 0.5f;
 
     for (int i = 0; i < n; ++i) {
         const float x0 = startX + i * (pillW + gapPx);
         pills_[i].rect   = {x0, pillY, x0 + pillW, pillY + pillHPx};
         pills_[i].active = (i == active_idx_);
 
-        // Close button: top-right corner of the pill.
+        // Close button: top-left corner of the pill (macOS Terminal style).
         pills_[i].closeRect = {
-            pills_[i].rect.right  - closeMarPx - closeSzPx,
-            pills_[i].rect.top    + closeMarPx,
-            pills_[i].rect.right  - closeMarPx,
-            pills_[i].rect.top    + closeMarPx + closeSzPx,
+            pills_[i].rect.left  + closeMarPx,
+            pills_[i].rect.top   + closeMarPx,
+            pills_[i].rect.left  + closeMarPx + closeSzPx,
+            pills_[i].rect.top   + closeMarPx + closeSzPx,
         };
     }
 
-    // "+" button: right of the last pill.
-    const float lastRight = pills_[n - 1].rect.right;
-    const float plusY     = (caption_h_px_ - plusSzPx) * 0.5f;
+    // "+" button: pinned to the right edge of the strip.
+    const float plusY = strip_rect_.top + (stripH - plusSzPx) * 0.5f;
     plus_rect_ = {
-        lastRight + plusGapPx,
+        strip_rect_.right - padXPx - plusSzPx,
         plusY,
-        lastRight + plusGapPx + plusSzPx,
+        strip_rect_.right - padXPx,
         plusY + plusSzPx,
     };
 }
@@ -240,10 +236,11 @@ void TabBar::Render(ID2D1DeviceContext* dc,
                                                    alpha * 0.45f;
             brush->SetColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, labelAlpha));
 
-            // Shrink label rect so it doesn't overlap the × button.
+            // Shrink label rect so it doesn't overlap the × button
+            // (close button is on the LEFT of the pill, macOS Terminal style).
             D2D1_RECT_F labelRect = pill.rect;
             if (showClose)
-                labelRect.right -= closeSzPx + theme::ToPx(kCloseMargin, dpi_);
+                labelRect.left += closeSzPx + theme::ToPx(kCloseMargin, dpi_);
 
             const auto& t = tabs_[i].title;
             dc->DrawTextW(t.c_str(), static_cast<UINT32>(t.size()),

@@ -424,21 +424,22 @@ void BorderlessWindow::RelayoutCaptionMenu() {
 
 void BorderlessWindow::RelayoutTabBar() {
     if (!hwnd_) return;
-    const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
-
-    // Right edge of traffic lights group (3 discs):
-    //   insetX + 3*diameter + 2*spacing
-    const float trafficRight =
-        theme::ToPx(theme::kTrafficLightInsetX, dpi_)
-        + 3.0f * theme::ToPx(theme::kTrafficLightDiameter, dpi_)
-        + 2.0f * theme::ToPx(theme::kTrafficLightSpacing,  dpi_)
-        + theme::ToPx(6.0f, dpi_);  // small gap
-
-    // Caption button left edge.
-    const auto& btnBounds    = caption_button_.Bounds();
-    const float captionBtnLeft = btnBounds.left - theme::ToPx(4.0f, dpi_);
-
-    tab_bar_.UpdateLayout(trafficRight, captionBtnLeft, captionPx, dpi_);
+    RECT rc{};
+    ::GetClientRect(hwnd_, &rc);
+    const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+    const float swW = std::max(1.0f,
+        static_cast<float>(rc.right - rc.left) - 2.0f * marginPx);
+    const float captionPx = theme::ToPx(theme::kCaptionHeight,  dpi_);
+    const float stripPx   = theme::ToPx(theme::kTabStripHeight, dpi_);
+    // Tab strip occupies the full squircle width, just below the
+    // caption strip and above the terminal grid.
+    const D2D1_RECT_F stripRect{
+        0.0f,
+        captionPx,
+        swW,
+        captionPx + stripPx,
+    };
+    tab_bar_.UpdateLayout(stripRect, dpi_);
 }
 
 void BorderlessWindow::ToggleMenu() {
@@ -496,8 +497,9 @@ void BorderlessWindow::OnMenuTimer() {
 // ---------------------------------------------------------------------------
 
 bool BorderlessWindow::IsInsideContent(int wx, int wy) const {
-    const int captionH = theme::ToPxInt(theme::kCaptionHeight, dpi_);
-    if (wy < captionH) return false;
+    const int captionH = theme::ToPxInt(theme::kCaptionHeight,  dpi_);
+    const int stripH   = theme::ToPxInt(theme::kTabStripHeight, dpi_);
+    if (wy < captionH + stripH) return false;
 
     // Squircle width is the HWND minus 2 * shadow margin.
     const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
@@ -512,7 +514,8 @@ bool BorderlessWindow::ContentPointToCell(int wx, int wy,
                                           int& viewRow, int& col) const {
     if (!session_) return false;
 
-    const int captionH = theme::ToPxInt(theme::kCaptionHeight, dpi_);
+    const int captionH = theme::ToPxInt(theme::kCaptionHeight,  dpi_);
+    const int stripH   = theme::ToPxInt(theme::kTabStripHeight, dpi_);
 
     int cols = 0, rows = 0;
     renderer_.GridForCurrentSize(cols, rows);
@@ -525,7 +528,7 @@ bool BorderlessWindow::ContentPointToCell(int wx, int wy,
     if (cellW < 1.0f || cellH < 1.0f) return false;
 
     const float gx = static_cast<float>(wx) - padXpx;
-    const float gy = static_cast<float>(wy) - captionH - padYpx;
+    const float gy = static_cast<float>(wy) - captionH - stripH - padYpx;
 
     int c = static_cast<int>(std::floor(gx / cellW));
     int r = static_cast<int>(std::floor(gy / cellH));
@@ -665,8 +668,14 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
         return HTTRANSPARENT;
     }
 
-    const int border     = theme::ToPxInt(theme::kResizeBorder,  dpi_);
-    const int captionHpx = theme::ToPxInt(theme::kCaptionHeight, dpi_);
+    const int border     = theme::ToPxInt(theme::kResizeBorder,    dpi_);
+    const int captionHpx = theme::ToPxInt(theme::kCaptionHeight,   dpi_);
+    const int stripHpx   = theme::ToPxInt(theme::kTabStripHeight,  dpi_);
+    // The whole top band (caption + tab strip) is draggable, except
+    // where actual UI lives (traffic-lights, caption button, tab pills,
+    // "+" button, settings Done pill). The strip itself reads as part
+    // of the drag region just like the caption strip.
+    const int dragBandHpx = captionHpx + stripHpx;
 
     const bool top    = pt.y <  sq.top    + border;
     const bool bottom = pt.y >= sq.bottom - border;
@@ -719,7 +728,7 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
         // still move the window with a dialog up, like a modal sheet).
         if (wy >= captionHpx) return HTCLIENT;
     }
-    if (wy < captionHpx) {
+    if (wy < dragBandHpx) {
         return HTCAPTION;
     }
     return HTCLIENT;
