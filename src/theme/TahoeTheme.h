@@ -141,6 +141,38 @@ inline constexpr float kAlertButtonRadius   = 7.0f;
 inline constexpr float kAlertButtonTextSize = 13.0f;
 inline constexpr int   kAlertAnimDurationMs = 220;
 
+// ---- Settings sheet (in-window) ------------------------------------------
+//
+// macOS Tahoe System Settings - sidebar on the left, content pane on the
+// right, both rounded, with breathing space between. We render exactly
+// the same structure inside the squircle. Sidebar items are pill rows
+// with an SF Symbol-style glyph + label; the active row gets the system
+// accent fill.
+
+inline constexpr float kSettingsSidebarWidth      = 200.0f;
+inline constexpr float kSettingsContentMinWidth   = 360.0f;
+inline constexpr float kSettingsOuterPadding      = 12.0f;   // gutter inside squircle
+inline constexpr float kSettingsPaneCornerRadius  = 12.0f;   // sidebar + content panes
+inline constexpr float kSettingsRowHeight         = 30.0f;
+inline constexpr float kSettingsRowGap            =  2.0f;
+inline constexpr float kSettingsRowPaddingX       =  8.0f;
+inline constexpr float kSettingsRowRadius         =  7.0f;
+inline constexpr float kSettingsRowIconSize       = 14.0f;
+inline constexpr float kSettingsRowIconGap        =  9.0f;
+inline constexpr float kSettingsRowTextSize       = 13.0f;
+inline constexpr float kSettingsHeaderTextSize    = 11.0f;
+inline constexpr float kSettingsHeaderPaddingX    = 12.0f;
+inline constexpr float kSettingsHeaderTopGap      = 10.0f;   // before first header
+inline constexpr float kSettingsHeaderBottomGap   =  4.0f;
+inline constexpr float kSettingsContentPaddingX   = 24.0f;
+inline constexpr float kSettingsContentPaddingY   = 22.0f;
+inline constexpr float kSettingsTitleSize         = 22.0f;   // pane title
+inline constexpr float kSettingsBodyTextSize      = 13.0f;
+inline constexpr float kSettingsCloseDiameter     = 22.0f;   // small circular X
+inline constexpr float kSettingsCloseInsetX       =  8.0f;   // from sidebar right
+inline constexpr float kSettingsCloseInsetY       =  8.0f;
+inline constexpr int   kSettingsAnimDurationMs    = 280;
+
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
 inline constexpr int kDefaultWindowHeight = 560;
@@ -229,6 +261,21 @@ struct Palette {
     Color alertButtonHover;  // primary button hover overlay
     Color alertButtonText;   // primary button glyph
 
+    // In-window Settings sheet (Tahoe System Settings clone).
+    Color settingsScrim;        // dim layer over terminal while open
+    Color settingsSidebarFill;  // left rounded pane
+    Color settingsContentFill;  // right rounded pane
+    Color settingsHeader;       // section header text colour ("General", etc.)
+    Color settingsRowHover;     // hovered sidebar row overlay
+    Color settingsRowActive;    // selected sidebar row fill (system accent)
+    Color settingsRowText;      // sidebar row label
+    Color settingsRowTextActive;// selected sidebar row label
+    Color settingsTitle;        // big pane title ("Appearance")
+    Color settingsBody;         // pane body text
+    Color settingsBodyMuted;    // secondary body text (descriptions)
+    Color settingsCloseFill;    // top-right close-X background
+    Color settingsCloseGlyph;   // close-X stroke
+
     // Text
     Color text;
     Color textMuted;
@@ -283,6 +330,20 @@ inline constexpr Palette kDarkPalette{
     .alertButtonFill  = Color::FromARGB(0xFF0A84FF),
     .alertButtonHover = Color::FromARGB(0x22FFFFFF),
     .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
+
+    .settingsScrim         = Color::FromARGB(0x99000000),
+    .settingsSidebarFill   = Color::FromARGB(0xFF222226),
+    .settingsContentFill   = Color::FromARGB(0xFF1F1F23),
+    .settingsHeader        = Color::FromARGB(0x99EDEDEF),
+    .settingsRowHover      = Color::FromARGB(0x22FFFFFF),
+    .settingsRowActive     = Color::FromARGB(0xFF0A84FF),
+    .settingsRowText       = Color::FromARGB(0xFFEDEDEF),
+    .settingsRowTextActive = Color::FromARGB(0xFFFFFFFF),
+    .settingsTitle         = Color::FromARGB(0xFFEDEDEF),
+    .settingsBody          = Color::FromARGB(0xFFEDEDEF),
+    .settingsBodyMuted     = Color::FromARGB(0x99EDEDEF),
+    .settingsCloseFill     = Color::FromARGB(0x33FFFFFF),
+    .settingsCloseGlyph    = Color::FromARGB(0xFFEDEDEF),
 
     .text      = Color::FromARGB(0xFFEDEDEF),
     .textMuted = Color::FromARGB(0x99EDEDEF),
@@ -341,6 +402,20 @@ inline constexpr Palette kLightPalette{
     .alertButtonFill  = Color::FromARGB(0xFF007AFF),
     .alertButtonHover = Color::FromARGB(0x14000000),
     .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
+
+    .settingsScrim         = Color::FromARGB(0x66000000),
+    .settingsSidebarFill   = Color::FromARGB(0xFFEFEFF1),
+    .settingsContentFill   = Color::FromARGB(0xFFF8F8F8),
+    .settingsHeader        = Color::FromARGB(0x991A1A1C),
+    .settingsRowHover      = Color::FromARGB(0x14000000),
+    .settingsRowActive     = Color::FromARGB(0xFF007AFF),
+    .settingsRowText       = Color::FromARGB(0xFF1A1A1C),
+    .settingsRowTextActive = Color::FromARGB(0xFFFFFFFF),
+    .settingsTitle         = Color::FromARGB(0xFF1A1A1C),
+    .settingsBody          = Color::FromARGB(0xFF1A1A1C),
+    .settingsBodyMuted     = Color::FromARGB(0x991A1A1C),
+    .settingsCloseFill     = Color::FromARGB(0x14000000),
+    .settingsCloseGlyph    = Color::FromARGB(0xFF1A1A1C),
 
     .text      = Color::FromARGB(0xFF1A1A1C),
     .textMuted = Color::FromARGB(0x991A1A1C),

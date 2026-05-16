@@ -34,6 +34,7 @@
 #include "ui/AppAlert.h"
 #include "ui/CaptionButton.h"
 #include "ui/CaptionMenu.h"
+#include "ui/SettingsView.h"
 #include "ui/TrafficLights.h"
 
 namespace mactw::render {
@@ -68,7 +69,8 @@ public:
                 ui::TrafficLights& trafficLights,
                 ui::CaptionButton& captionButton,
                 ui::CaptionMenu&   captionMenu,
-                ui::AppAlert&      appAlert);
+                ui::AppAlert&      appAlert,
+                ui::SettingsView&  settings);
 
     UINT          Dpi()        const { return dpi_; }
     UINT          WidthPx()    const { return width_px_; }

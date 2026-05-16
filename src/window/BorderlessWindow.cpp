@@ -27,6 +27,10 @@ constexpr UINT     kMenuTimerPeriod  = 16;
 constexpr UINT_PTR kAlertTimerId     = 0x4154u;   // 'AT'
 constexpr UINT     kAlertTimerPeriod = 16;
 
+// Settings sheet animation timer id.
+constexpr UINT_PTR kSettingsTimerId     = 0x5354u;   // 'ST'
+constexpr UINT     kSettingsTimerPeriod = 16;
+
 // Get per-monitor DPI; falls back to 96 only on pre-1607 systems.
 UINT GetWindowDpiSafe(HWND hwnd) {
     using PFN = UINT(WINAPI*)(HWND);
@@ -150,6 +154,9 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     RelayoutAppAlert();
     Trace("app-alert layout done");
 
+    RelayoutSettings();
+    Trace("settings layout done");
+
     // Toggle the menu when the caption button is clicked. The on_click
     // handler runs synchronously inside CaptionButton::OnLButtonUp.
     caption_button_.SetOnClick([this]() { ToggleMenu(); });
@@ -212,6 +219,66 @@ void BorderlessWindow::OnDpiChanged(UINT newDpi, const RECT* suggested) {
     }
     RelayoutCaptionMenu();
     RelayoutAppAlert();
+    RelayoutSettings();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+// ---------------------------------------------------------------------------
+
+void BorderlessWindow::RelayoutSettings() {
+    if (!hwnd_) return;
+    RECT rc{};
+    ::GetClientRect(hwnd_, &rc);
+    const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+    const float swW = std::max(1.0f,
+        static_cast<float>(rc.right - rc.left) - 2.0f * marginPx);
+    const float swH = std::max(1.0f,
+        static_cast<float>(rc.bottom - rc.top) - 2.0f * marginPx);
+    const D2D1_RECT_F squircleRect{0.0f, 0.0f, swW, swH};
+    const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
+    settings_.UpdateLayout(squircleRect, captionPx, dpi_);
+}
+
+void BorderlessWindow::ShowSettings() {
+    settings_.Show();
+    RelayoutSettings();
+    StartSettingsAnimation(1.0f);
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void BorderlessWindow::HideSettings() {
+    settings_.RequestClose();
+    StartSettingsAnimation(0.0f);
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void BorderlessWindow::StartSettingsAnimation(float target) {
+    settings_anim_from_   = settings_anim_t_;
+    settings_anim_target_ = target;
+    settings_anim_start_  = ::GetTickCount();
+    if (settings_timer_id_ == 0) {
+        settings_timer_id_ = ::SetTimer(hwnd_, kSettingsTimerId,
+                                        kSettingsTimerPeriod, nullptr);
+    }
+}
+
+void BorderlessWindow::OnSettingsTimer() {
+    const DWORD now = ::GetTickCount();
+    const DWORD dt  = now - settings_anim_start_;
+    const float total = static_cast<float>(theme::kSettingsAnimDurationMs);
+    const float u = std::clamp(static_cast<float>(dt) / total, 0.0f, 1.0f);
+
+    settings_anim_t_ = settings_anim_from_
+                     + (settings_anim_target_ - settings_anim_from_) * u;
+    settings_.SetProgress(settings_anim_t_);
+
+    if (u >= 1.0f) {
+        ::KillTimer(hwnd_, settings_timer_id_);
+        settings_timer_id_ = 0;
+        if (settings_anim_target_ <= 0.0f) {
+            settings_.SetOpen(false);
+        }
+    }
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -547,6 +614,11 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
         // trigger a window drag or resize.
         return HTCLIENT;
     }
+    if (settings_.IsOpen()) {
+        // Settings is full-content modal: every click below the caption
+        // strip is its own. Caption strip stays draggable.
+        if (wy >= captionHpx) return HTCLIENT;
+    }
     if (app_alert_.IsOpen()) {
         // Alert is modal: the scrim catches every click below the
         // caption strip. Keep the strip itself draggable (the user can
@@ -603,6 +675,8 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 const int wx = pt.x - marginPx;
                 const int wy = pt.y - marginPx;
                 if (IsInsideContent(wx, wy) &&
+                    !settings_.IsOpen() &&
+                    !app_alert_.IsOpen() &&
                     traffic_.HitTest(wx, wy) == ui::TrafficAction::None &&
                     !caption_button_.HitTest(wx, wy)) {
                     ::SetCursor(::LoadCursorW(nullptr, IDC_IBEAM));
@@ -626,6 +700,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             caption_button_.UpdateLayout(sqW, dpi_);
             RelayoutCaptionMenu();
             RelayoutAppAlert();
+            RelayoutSettings();
             SyncPtyToSize();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
@@ -653,6 +728,10 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 DismissAlert();
                 return 0;
             }
+            if (wp == VK_ESCAPE && settings_.IsOpen() && !settings_.IsClosing()) {
+                HideSettings();
+                return 0;
+            }
             if (wp == VK_ESCAPE && caption_menu_.IsOpen()) {
                 StartMenuAnimation(0.0f);
                 ::InvalidateRect(hwnd_, nullptr, FALSE);
@@ -671,6 +750,12 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             // While an alert is on screen the shell is frozen out: don't
             // forward keystrokes to the pty until the dialog is gone.
             if (app_alert_.IsOpen()) {
+                return 0;
+            }
+
+            // Same modality contract for the Settings sheet: while it's
+            // visible the terminal can't see keystrokes.
+            if (settings_.IsOpen()) {
                 return 0;
             }
 
@@ -737,6 +822,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_SYSCHAR: {
             if (!session_) break;
             if (app_alert_.IsOpen()) return 0;
+            if (settings_.IsOpen()) return 0;
             char buf[8];
             const size_t n = terminal::TranslateChar(static_cast<wchar_t>(wp),
                                                      buf, sizeof(buf));
@@ -766,6 +852,10 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 OnAlertTimer();
                 return 0;
             }
+            if (wp == kSettingsTimerId) {
+                OnSettingsTimer();
+                return 0;
+            }
             break;
 
         case WM_SETFOCUS:
@@ -782,11 +872,13 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             caption_button_.OnMouseMove(wx, wy);
             caption_menu_.OnMouseMove(wx, wy);
             app_alert_.OnMouseMove(wx, wy);
+            settings_.OnMouseMove(wx, wy);
 
             TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
             ::TrackMouseEvent(&tme);
 
-            if (selecting_ && session_ && !app_alert_.IsOpen()) {
+            if (selecting_ && session_ && !app_alert_.IsOpen()
+                && !settings_.IsOpen()) {
                 int viewRow = 0, col = 0;
                 if (ContentPointToCell(wx, wy, viewRow, col)) {
                     auto& buf = session_->Buffer();
@@ -804,6 +896,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             caption_button_.OnMouseLeave();
             caption_menu_.OnMouseLeave();
             app_alert_.OnMouseLeave();
+            settings_.OnMouseLeave();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
 
@@ -819,6 +912,16 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             if (app_alert_.IsOpen() && !app_alert_.IsClosing()) {
                 if (app_alert_.HitTestPanel(wx, wy)) {
                     app_alert_.OnLButtonDown(wx, wy);
+                }
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+                break;
+            }
+
+            // Modal Settings sheet: clicks inside the sidebar/content
+            // panes go to the view; clicks on the scrim stay swallowed.
+            if (settings_.IsOpen() && !settings_.IsClosing()) {
+                if (settings_.HitTestPanel(wx, wy)) {
+                    settings_.OnLButtonDown(wx, wy);
                 }
                 ::InvalidateRect(hwnd_, nullptr, FALSE);
                 break;
@@ -879,6 +982,17 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 break;
             }
 
+            if (settings_.IsOpen() && !settings_.IsClosing()) {
+                // Settings sheet in front. The view returns true if the
+                // user clicked the close-X; otherwise the click selects
+                // a row.
+                if (settings_.OnLButtonUp(wx, wy)) {
+                    HideSettings();
+                }
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+                break;
+            }
+
             if (caption_menu_.IsOpen() && caption_menu_.HitTest(wx, wy)) {
                 // Pick fired -> the item handler runs synchronously and
                 // typically wants the menu to disappear afterward.
@@ -928,6 +1042,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         // the middle button, which laptops rarely have.
         case WM_RBUTTONUP: {
             if (app_alert_.IsOpen()) return 0;
+            if (settings_.IsOpen())  return 0;
             PasteFromClipboard();
             return 0;
         }
@@ -935,6 +1050,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_MOUSEWHEEL: {
             if (!session_) break;
             if (app_alert_.IsOpen()) return 0;
+            if (settings_.IsOpen())  return 0;
             const int delta = GET_WHEEL_DELTA_WPARAM(wp);
             // Lines per wheel notch from the OS. Returns WHEEL_PAGESCROLL
             // for "Scroll one page".
@@ -967,7 +1083,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_PAINT:
             renderer_.Render(active_, traffic_, caption_button_,
-                             caption_menu_, app_alert_);
+                             caption_menu_, app_alert_, settings_);
             ::ValidateRect(hwnd_, nullptr);
             return 0;
 

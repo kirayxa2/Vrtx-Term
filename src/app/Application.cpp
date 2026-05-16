@@ -71,17 +71,12 @@ int Application::Run(HINSTANCE hInstance) {
     {
         auto& menu = window_.GetCaptionMenu();
 
-        // Settings: not yet implemented; show a quick tooltip-equivalent
-        // via the in-window alert so the user can confirm the wiring works.
+        // Settings: open the in-window Settings sheet (sidebar + content).
         menu.AddItem({
             L"\u2699",   // U+2699 GEAR
             ru ? L"Настройки" : L"Settings",
-            [this, ru]() {
-                window_.ShowAlert(
-                    ru ? L"Настройки" : L"Settings",
-                    ru ? L"Окно настроек ещё не готово."
-                       : L"Settings UI is not implemented yet.",
-                    L"OK");
+            [this]() {
+                window_.ShowSettings();
             }
         });
 
@@ -110,7 +105,77 @@ int Application::Run(HINSTANCE hInstance) {
             }
         });
     }
-    Trace("caption-menu items configured");
+    // Populate the Settings sheet sections. Each row is a category in
+    // the sidebar; the active row's title + body are shown in the
+    // content pane on the right. Real settings controls (toggles,
+    // pickers, sliders) will land on top of this scaffolding.
+    {
+        auto& s = window_.GetSettings();
+
+        s.AddItem({
+            L"\u2699",   // gear
+            ru ? L"Общие"      : L"General",
+            ru ? L"Общие"      : L"General",
+            ru ? L"Базовые параметры приложения. В будущих версиях здесь "
+                 L"будут язык интерфейса, поведение при запуске и "
+                 L"автообновления."
+               : L"Application-wide basics. Future versions will expose "
+                 L"interface language, startup behaviour, and auto-update "
+                 L"cadence here.",
+            nullptr,
+        });
+
+        s.AddItem({
+            L"\u25CE",   // bullseye - placeholder for "Appearance"
+            ru ? L"Внешний вид" : L"Appearance",
+            ru ? L"Внешний вид" : L"Appearance",
+            ru ? L"Темы (Tahoe Light / Tahoe Dark), радиус скруглений, "
+                 L"непрозрачность окна и шрифты chrome будут жить здесь."
+               : L"Themes (Tahoe Light / Tahoe Dark), corner radii, window "
+                 L"opacity and chrome fonts will live here.",
+            nullptr,
+        });
+
+        s.AddItem({
+            L"\u276F",   // > shell prompt arrow
+            ru ? L"Промпт"      : L"Prompt",
+            ru ? L"Промпт"      : L"Prompt",
+            ru ? L"Конструктор однострочного и многострочного промпта (как у "
+                 L"oh-my-posh / starship). Можно будет настроить сегменты, "
+                 L"цвета, иконки и Git-статус."
+               : L"Builder for single- and multi-line prompts (oh-my-posh / "
+                 L"starship style). You will be able to tune segments, "
+                 L"colours, icons and Git status display.",
+            nullptr,
+        });
+
+        s.AddItem({
+            L"\u2316",   // crosshair - "Terminal"
+            ru ? L"Терминал"    : L"Terminal",
+            ru ? L"Терминал"    : L"Terminal",
+            ru ? L"Шрифт и его размер, lineHeight, ANSI-палитра, размер "
+                 L"скроллбэка и поведение Bell. Сейчас все значения "
+                 L"захардкожены в TahoeTheme."
+               : L"Font face and size, line height, ANSI palette, scrollback "
+                 L"depth and bell behaviour. The values are currently "
+                 L"hard-coded in TahoeTheme.",
+            nullptr,
+        });
+
+        s.AddItem({
+            L"\u2139",   // info
+            ru ? L"О программе" : L"About",
+            ru ? L"О программе" : L"About",
+            ru ? L"MacTermWin\nТерминал в стиле macOS 26 Tahoe для Windows.\n"
+                 L"Сделано в виде эксперимента над DComp + D2D без DWM-"
+                 L"отрисовки окна."
+               : L"MacTermWin\nA macOS 26 Tahoe-styled terminal for Windows.\n"
+                 L"Built as an experiment with DirectComposition + Direct2D "
+                 L"and zero DWM-painted chrome.",
+            nullptr,
+        });
+    }
+    Trace("settings sections configured");
 
     MSG msg{};
     while (::GetMessageW(&msg, nullptr, 0, 0) > 0) {

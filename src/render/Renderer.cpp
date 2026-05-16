@@ -194,7 +194,8 @@ void Renderer::Render(bool windowActive,
                       ui::TrafficLights& trafficLights,
                       ui::CaptionButton& captionButton,
                       ui::CaptionMenu&   captionMenu,
-                      ui::AppAlert&      appAlert) {
+                      ui::AppAlert&      appAlert,
+                      ui::SettingsView&  settings) {
     if (!d2d_dc_ || !swap_chain_) return;
 
     const auto& pal      = theme::ActivePalette();
@@ -325,6 +326,17 @@ void Renderer::Render(bool windowActive,
         const D2D1_RECT_F squircleRect{0.0f, 0.0f, swW, swH};
         appAlert.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
                         dwrite_factory_.Get(), squircleRect, captionPx);
+    }
+
+    // Settings sheet sits above the terminal (and above an alert, in
+    // case both happen to be visible during a transition). It draws
+    // BEFORE the caption menu so a chrome dropdown still wins layer
+    // order if the user pops it open.
+    {
+        const D2D1_RECT_F squircleRect{0.0f, 0.0f, swW, swH};
+        settings.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
+                        dwrite_factory_.Get());
+        (void)squircleRect;
     }
 
     // Caption menu draws *after* the button so its panel layers on top

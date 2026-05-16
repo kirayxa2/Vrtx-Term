@@ -30,6 +30,7 @@
 #include "ui/AppAlert.h"
 #include "ui/CaptionButton.h"
 #include "ui/CaptionMenu.h"
+#include "ui/SettingsView.h"
 #include "ui/TrafficLights.h"
 
 namespace mactw::window {
@@ -55,6 +56,7 @@ public:
     ui::CaptionButton& GetCaptionButton() { return caption_button_; }
     ui::CaptionMenu&   GetCaptionMenu()   { return caption_menu_; }
     ui::AppAlert&      GetAppAlert()      { return app_alert_; }
+    ui::SettingsView&  GetSettings()      { return settings_; }
 
     // Open the in-window alert with the given strings and animate it in.
     // This replaces any direct MessageBoxW calls so all dialogs stay in
@@ -62,6 +64,10 @@ public:
     void ShowAlert(std::wstring title,
                    std::wstring message,
                    std::wstring buttonText);
+
+    // Open / close the Settings sheet with animation.
+    void ShowSettings();
+    void HideSettings();
 
 private:
     static LRESULT CALLBACK StaticWndProc(HWND, UINT, WPARAM, LPARAM);
@@ -110,6 +116,7 @@ private:
     ui::CaptionButton           caption_button_;
     ui::CaptionMenu             caption_menu_;
     ui::AppAlert                app_alert_;
+    ui::SettingsView            settings_;
     terminal::TerminalSession*  session_{nullptr};
 
     // ---- Caption menu animation ---------------------------------------
@@ -145,6 +152,17 @@ private:
     void OnAlertTimer();
     void RelayoutAppAlert();
     void DismissAlert();
+
+    // ---- Settings sheet animation -------------------------------------
+    UINT_PTR settings_timer_id_   {0};
+    DWORD    settings_anim_start_ {0};
+    float    settings_anim_from_  {0.0f};
+    float    settings_anim_target_{0.0f};
+    float    settings_anim_t_     {0.0f};
+
+    void StartSettingsAnimation(float target);
+    void OnSettingsTimer();
+    void RelayoutSettings();
 };
 
 }  // namespace mactw::window

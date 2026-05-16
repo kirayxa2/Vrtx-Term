@@ -70,6 +70,7 @@ set(MACTERMWIN_SOURCES
     src/ui/CaptionButton.cpp
     src/ui/CaptionMenu.cpp
     src/ui/AppAlert.cpp
+    src/ui/SettingsView.cpp
 
     src/theme/TahoeTheme.cpp
 )
@@ -98,6 +99,7 @@ set(MACTERMWIN_HEADERS
     src/ui/CaptionButton.h
     src/ui/CaptionMenu.h
     src/ui/AppAlert.h
+    src/ui/SettingsView.h
 
     src/theme/TahoeTheme.h
 )
