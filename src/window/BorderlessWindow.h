@@ -27,6 +27,7 @@
 #include "pch.h"
 #include "render/Renderer.h"
 #include "terminal/TerminalSession.h"
+#include "ui/AppAlert.h"
 #include "ui/CaptionButton.h"
 #include "ui/CaptionMenu.h"
 #include "ui/TrafficLights.h"
@@ -53,6 +54,14 @@ public:
     // handler from outside (e.g. Application::Run).
     ui::CaptionButton& GetCaptionButton() { return caption_button_; }
     ui::CaptionMenu&   GetCaptionMenu()   { return caption_menu_; }
+    ui::AppAlert&      GetAppAlert()      { return app_alert_; }
+
+    // Open the in-window alert with the given strings and animate it in.
+    // This replaces any direct MessageBoxW calls so all dialogs stay in
+    // our own chrome.
+    void ShowAlert(std::wstring title,
+                   std::wstring message,
+                   std::wstring buttonText);
 
 private:
     static LRESULT CALLBACK StaticWndProc(HWND, UINT, WPARAM, LPARAM);
@@ -100,6 +109,7 @@ private:
     ui::TrafficLights           traffic_;
     ui::CaptionButton           caption_button_;
     ui::CaptionMenu             caption_menu_;
+    ui::AppAlert                app_alert_;
     terminal::TerminalSession*  session_{nullptr};
 
     // ---- Caption menu animation ---------------------------------------
@@ -119,6 +129,22 @@ private:
     void StartMenuAnimation(float target);
     void OnMenuTimer();
     void RelayoutCaptionMenu();
+
+    // ---- App alert animation ------------------------------------------
+    //
+    // Mirrors the menu animation logic; we keep the timer separate so an
+    // alert can open over the caption menu and vice-versa without their
+    // animations cross-contaminating.
+    UINT_PTR alert_timer_id_   {0};
+    DWORD    alert_anim_start_ {0};
+    float    alert_anim_from_  {0.0f};
+    float    alert_anim_target_{0.0f};
+    float    alert_anim_t_     {0.0f};
+
+    void StartAlertAnimation(float target);
+    void OnAlertTimer();
+    void RelayoutAppAlert();
+    void DismissAlert();
 };
 
 }  // namespace mactw::window

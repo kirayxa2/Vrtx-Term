@@ -193,7 +193,8 @@ void Renderer::Resize(UINT widthPx, UINT heightPx) {
 void Renderer::Render(bool windowActive,
                       ui::TrafficLights& trafficLights,
                       ui::CaptionButton& captionButton,
-                      ui::CaptionMenu&   captionMenu) {
+                      ui::CaptionMenu&   captionMenu,
+                      ui::AppAlert&      appAlert) {
     if (!d2d_dc_ || !swap_chain_) return;
 
     const auto& pal      = theme::ActivePalette();
@@ -315,6 +316,16 @@ void Renderer::Render(bool windowActive,
     // corner if a future layout pushes it close to the edge.
     captionButton.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
                          windowActive);
+
+    // App alert sits above the terminal but below the caption-menu (a
+    // dropdown should still be openable while a dialog is up - although
+    // that's a degenerate case, the layering avoids visual conflicts).
+    {
+        const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
+        const D2D1_RECT_F squircleRect{0.0f, 0.0f, swW, swH};
+        appAlert.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
+                        dwrite_factory_.Get(), squircleRect, captionPx);
+    }
 
     // Caption menu draws *after* the button so its panel layers on top
     // of any caption-strip content below the button, but is still inside

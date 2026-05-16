@@ -31,6 +31,7 @@
 #include "pch.h"
 #include "render/TerminalView.h"
 #include "terminal/TerminalSession.h"
+#include "ui/AppAlert.h"
 #include "ui/CaptionButton.h"
 #include "ui/CaptionMenu.h"
 #include "ui/TrafficLights.h"
@@ -66,7 +67,8 @@ public:
     void Render(bool windowActive,
                 ui::TrafficLights& trafficLights,
                 ui::CaptionButton& captionButton,
-                ui::CaptionMenu&   captionMenu);
+                ui::CaptionMenu&   captionMenu,
+                ui::AppAlert&      appAlert);
 
     UINT          Dpi()        const { return dpi_; }
     UINT          WidthPx()    const { return width_px_; }

@@ -96,24 +96,50 @@ inline constexpr float kCaptionButtonOffsetY  = 1.0f;
 //
 // Width is fixed at 220pt so labels don't reflow as we add/remove items.
 // Height is derived from the items list at layout time. The corner
-// radius is large enough to feel "Tahoe" but smaller than the window's
-// 16pt so the panel reads as a child element rather than a sibling.
+// radius matches the window radius so the menu reads as the same chrome
+// family rather than a foreign element.
 inline constexpr float kCaptionMenuWidth         = 220.0f;
-inline constexpr float kCaptionMenuRowHeight     = 32.0f;
-inline constexpr float kCaptionMenuPaddingX      = 10.0f;
+inline constexpr float kCaptionMenuRowHeight     = 30.0f;
+inline constexpr float kCaptionMenuPaddingX      = 6.0f;   // outer panel
 inline constexpr float kCaptionMenuPaddingY      = 6.0f;
-inline constexpr float kCaptionMenuGap           = 2.0f;
-inline constexpr float kCaptionMenuIconSize      = 16.0f;
-inline constexpr float kCaptionMenuIconGap       = 10.0f;
+inline constexpr float kCaptionMenuRowPaddingX   = 10.0f;  // inside rows
+inline constexpr float kCaptionMenuGap           = 0.0f;   // rows are flush
+inline constexpr float kCaptionMenuIconSize      = 14.0f;
+inline constexpr float kCaptionMenuIconGap       = 8.0f;
 inline constexpr float kCaptionMenuTextSize      = 13.0f;
-inline constexpr float kCaptionMenuCornerRadius  = 11.0f;
+inline constexpr float kCaptionMenuCornerRadius  = kWindowCornerRadius;  // 16pt
+inline constexpr float kCaptionMenuRowRadius     = 7.0f;   // hover row pill
 inline constexpr float kCaptionMenuAnchorGap     = 6.0f;
-inline constexpr float kCaptionMenuShadowDpiScale = 1.0f;
+inline constexpr float kCaptionMenuShadowOffsetY = 8.0f;
+inline constexpr float kCaptionMenuShadowBlur    = 20.0f;
+inline constexpr float kCaptionMenuShadowAlpha   = 0.30f;
 
 // Animation duration for opening/closing the menu, in milliseconds.
 // 220ms is the Apple-stock spring constant for popovers - long enough
 // to feel deliberate, short enough not to delay the user.
 inline constexpr int kCaptionMenuAnimDurationMs = 220;
+
+// ---- Alert dialog (in-window) ---------------------------------------------
+//
+// macOS Tahoe replaces native NSAlert with a Liquid Glass sheet that
+// drops down inside the host window. We render exactly the same: a
+// dark scrim covers the terminal area, a rounded panel fades / scales
+// in on top, and the primary button is highlighted in the system
+// accent. This keeps the chrome 100% ours - no DWM dialog, no
+// MessageBoxW, no foreign window decorations.
+
+inline constexpr float kAlertWidth          = 340.0f;
+inline constexpr float kAlertCornerRadius   = 14.0f;
+inline constexpr float kAlertPaddingX       = 22.0f;
+inline constexpr float kAlertPaddingY       = 22.0f;
+inline constexpr float kAlertTitleSize      = 15.0f;
+inline constexpr float kAlertMessageSize    = 13.0f;
+inline constexpr float kAlertTitleGap       = 6.0f;     // title -> message
+inline constexpr float kAlertMessageGap     = 16.0f;    // message -> button
+inline constexpr float kAlertButtonHeight   = 28.0f;
+inline constexpr float kAlertButtonRadius   = 7.0f;
+inline constexpr float kAlertButtonTextSize = 13.0f;
+inline constexpr int   kAlertAnimDurationMs = 220;
 
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
@@ -188,9 +214,20 @@ struct Palette {
 
     // Caption "more" menu (Liquid Glass dropdown).
     Color captionMenuFill;          // panel base fill
-    Color captionMenuTopHighlight;  // thin highlight band along the top
     Color captionMenuRowHover;      // translucent overlay for hovered row
     Color captionMenuText;          // label + icon colour
+    Color captionMenuTextMuted;     // for "About" footer style if needed
+
+    // In-window alert / dialog (replaces native MessageBoxW). Drawn in
+    // our own chrome so dialogs feel like a continuation of the window
+    // rather than a foreign Win32 surface.
+    Color alertScrim;        // semi-transparent dim layer over the terminal
+    Color alertPanelFill;    // dialog body
+    Color alertTitle;        // title text
+    Color alertMessage;      // body text
+    Color alertButtonFill;   // primary button base
+    Color alertButtonHover;  // primary button hover overlay
+    Color alertButtonText;   // primary button glyph
 
     // Text
     Color text;
@@ -232,10 +269,20 @@ inline constexpr Palette kDarkPalette{
     .captionButtonHover   = Color::FromARGB(0x40FFFFFF),
     .captionButtonPressed = Color::FromARGB(0x55FFFFFF),
 
-    .captionMenuFill         = Color::FromARGB(0xE82A2A2E),
-    .captionMenuTopHighlight = Color::FromARGB(0x33FFFFFF),
+    .captionMenuFill         = Color::FromARGB(0xF02A2A2E),
     .captionMenuRowHover     = Color::FromARGB(0x33FFFFFF),
     .captionMenuText         = Color::FromARGB(0xFFEDEDEF),
+    .captionMenuTextMuted    = Color::FromARGB(0x99EDEDEF),
+
+    // System-blue accent in dark mode is brighter than in light to keep
+    // contrast against the panel fill.
+    .alertScrim       = Color::FromARGB(0x80000000),
+    .alertPanelFill   = Color::FromARGB(0xF02C2C30),
+    .alertTitle       = Color::FromARGB(0xFFEDEDEF),
+    .alertMessage     = Color::FromARGB(0xCCEDEDEF),
+    .alertButtonFill  = Color::FromARGB(0xFF0A84FF),
+    .alertButtonHover = Color::FromARGB(0x22FFFFFF),
+    .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
 
     .text      = Color::FromARGB(0xFFEDEDEF),
     .textMuted = Color::FromARGB(0x99EDEDEF),
@@ -282,10 +329,18 @@ inline constexpr Palette kLightPalette{
     .captionButtonHover   = Color::FromARGB(0x14000000),
     .captionButtonPressed = Color::FromARGB(0x22000000),
 
-    .captionMenuFill         = Color::FromARGB(0xE8F4F4F6),
-    .captionMenuTopHighlight = Color::FromARGB(0x66FFFFFF),
+    .captionMenuFill         = Color::FromARGB(0xF0F4F4F6),
     .captionMenuRowHover     = Color::FromARGB(0x14000000),
     .captionMenuText         = Color::FromARGB(0xFF1A1A1C),
+    .captionMenuTextMuted    = Color::FromARGB(0x991A1A1C),
+
+    .alertScrim       = Color::FromARGB(0x66000000),
+    .alertPanelFill   = Color::FromARGB(0xF2F4F4F6),
+    .alertTitle       = Color::FromARGB(0xFF1A1A1C),
+    .alertMessage     = Color::FromARGB(0xCC1A1A1C),
+    .alertButtonFill  = Color::FromARGB(0xFF007AFF),
+    .alertButtonHover = Color::FromARGB(0x14000000),
+    .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
 
     .text      = Color::FromARGB(0xFF1A1A1C),
     .textMuted = Color::FromARGB(0x991A1A1C),

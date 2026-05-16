@@ -3,14 +3,16 @@
 // Visual recipe (matches the right-side toolbar dropdowns shipped in the
 // stock macOS Tahoe apps - Mail, Notes, Settings):
 //
-//   - Squircle base shape, ~10pt corner radius.
-//   - Translucent dark fill (`captionMenuFill`) with a soft top-edge
-//     highlight (`captionMenuTopHighlight`) to suggest a curved glassy
-//     surface catching light from above.
-//   - 1pt hairline outline using the same colour as the window border so
-//     the menu reads as a piece of the same chrome family.
-//   - Soft drop shadow under the panel (offset 4pt, blur 16pt, alpha 28%)
+//   - Squircle base shape, corner radius matches the host window so the
+//     menu reads as part of the same chrome family.
+//   - Translucent dark fill (`captionMenuFill`) with NO top highlight
+//     band - the WWDC25 reference shows a perfectly even surface; the
+//     "glass" feeling comes from the fill being semi-translucent and
+//     the soft drop shadow underneath, not from a baked-in light strip.
+//   - Soft drop shadow under the panel (offset 8pt, blur 20pt, alpha 30%)
 //     so it floats above the terminal contents.
+//   - No visible outline. Apple does not draw a hairline around toolbar
+//     popovers; the panel reads as a free-floating piece of glass.
 //
 // Animation:
 //
@@ -19,25 +21,27 @@
 //   an Apple-style cubic-out curve. `Render()` interprets `progress_` as
 //   a per-frame transform:
 //
-//     scaleY    = 0.6 + 0.4 * progress              (panel grows downward)
+//     scaleY    = 0.85 + 0.15 * progress             (subtle vertical grow)
 //     opacity   = progress
-//     glyph fade = smoothstep(0.4, 1.0, progress)   (items appear last)
+//     glyph fade = smoothstep(0.3, 1.0, progress)    (items appear last)
 //
 //   The geometry origin is anchored to the centre top of the panel, so
 //   the growth visually starts from the caption button's bottom edge.
 //
 // Items:
 //
-//   The menu owns a vector of `Item`s, each with:
-//     - a Unicode glyph drawn at the leading edge (we use stock symbols
-//       that exist in Cascadia Code / Segoe UI Symbol so we never need a
-//       Nerd Font for the chrome itself);
-//     - a label string (UTF-16, already localised by the caller);
-//     - a click handler.
+//   The menu owns a vector of `Item`s, each with a leading glyph (drawn
+//   in Segoe UI Symbol so we never need a Nerd Font for chrome itself),
+//   a label, and a click handler.
 //
-//   The window forwards mouse events to the menu while it is open. On
-//   click of an item, `on_pick_` fires and the window animates the menu
-//   closed.
+// Performance notes:
+//
+//   The DWrite text formats (label + icon) are cached on the instance
+//   and only rebuilt when DPI/text size changes. Rebuilding them every
+//   frame - which the previous revision did - made the open/close
+//   animation visibly stutter. Same goes for solid-color brushes; the
+//   menu now reuses the caller-supplied `brush` (its colour is changed
+//   per-pass via SetColor) instead of allocating anything per-frame.
 
 #pragma once
 
@@ -104,15 +108,16 @@ private:
     // Cached layout (squircle-local px). bounds_ is the *expanded* rect;
     // Render() shrinks it according to `progress_`.
     D2D1_RECT_F bounds_{};
-    float       row_h_px_  {0};
-    float       padding_x_px_{0};
-    float       padding_y_px_{0};
-    float       gap_px_     {0};
-    float       icon_size_px_{0};
-    float       icon_gap_px_{0};
-    float       text_size_px_{0};
-    float       radius_px_  {0};
-    float       border_px_  {0};
+    float       row_h_px_      {0};
+    float       padding_x_px_  {0};   // panel outer padding
+    float       padding_y_px_  {0};
+    float       row_padding_x_px_{0}; // row inner padding
+    float       gap_px_        {0};
+    float       icon_size_px_  {0};
+    float       icon_gap_px_   {0};
+    float       text_size_px_  {0};
+    float       radius_px_     {0};
+    float       row_radius_px_ {0};
 
     bool   open_     {false};
     float  progress_ {0.0f};
@@ -122,10 +127,13 @@ private:
 
     std::vector<Item> items_;
 
-    // Dwrite text format is rebuilt lazily inside Render() from the
-    // factory we get there, so the menu doesn't need an Initialize().
-    mutable ComPtr<IDWriteTextFormat> fmt_;
-    mutable float                     fmt_built_at_size_{0};
+    // Cached DWrite formats. Rebuilt only when DPI/text size changes;
+    // this matters because re-creating these on every frame is what
+    // made the open/close animation stutter previously.
+    mutable ComPtr<IDWriteTextFormat> label_fmt_;
+    mutable ComPtr<IDWriteTextFormat> icon_fmt_;
+    mutable float                     fmt_built_at_text_size_{0};
+    mutable float                     fmt_built_at_icon_size_{0};
 };
 
 }  // namespace mactw::ui

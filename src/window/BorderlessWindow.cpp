@@ -22,6 +22,11 @@ constexpr int kWheelLinesPerDetent = 3;
 constexpr UINT_PTR kMenuTimerId      = 0x4D54u;   // 'MT'
 constexpr UINT     kMenuTimerPeriod  = 16;
 
+// App-alert animation timer id. Shares the same 60Hz cadence; the IDs
+// are distinct so the WM_TIMER handler can dispatch correctly.
+constexpr UINT_PTR kAlertTimerId     = 0x4154u;   // 'AT'
+constexpr UINT     kAlertTimerPeriod = 16;
+
 // Get per-monitor DPI; falls back to 96 only on pre-1607 systems.
 UINT GetWindowDpiSafe(HWND hwnd) {
     using PFN = UINT(WINAPI*)(HWND);
@@ -142,9 +147,15 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     RelayoutCaptionMenu();
     Trace("caption-menu layout done");
 
+    RelayoutAppAlert();
+    Trace("app-alert layout done");
+
     // Toggle the menu when the caption button is clicked. The on_click
     // handler runs synchronously inside CaptionButton::OnLButtonUp.
     caption_button_.SetOnClick([this]() { ToggleMenu(); });
+
+    // The alert button defaults to dismissing the dialog.
+    app_alert_.SetOnDismiss([this]() { DismissAlert(); });
 
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
@@ -200,6 +211,68 @@ void BorderlessWindow::OnDpiChanged(UINT newDpi, const RECT* suggested) {
         caption_button_.UpdateLayout(sqW, dpi_);
     }
     RelayoutCaptionMenu();
+    RelayoutAppAlert();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+// ---------------------------------------------------------------------------
+
+void BorderlessWindow::RelayoutAppAlert() {
+    if (!hwnd_) return;
+    RECT rc{};
+    ::GetClientRect(hwnd_, &rc);
+    const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+    const float swW = std::max(1.0f,
+        static_cast<float>(rc.right - rc.left) - 2.0f * marginPx);
+    const float swH = std::max(1.0f,
+        static_cast<float>(rc.bottom - rc.top) - 2.0f * marginPx);
+    const D2D1_RECT_F squircleRect{0.0f, 0.0f, swW, swH};
+    const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
+    app_alert_.UpdateLayout(squircleRect, captionPx, dpi_);
+}
+
+void BorderlessWindow::ShowAlert(std::wstring title,
+                                 std::wstring message,
+                                 std::wstring buttonText) {
+    app_alert_.Show(std::move(title), std::move(message), std::move(buttonText));
+    RelayoutAppAlert();
+    StartAlertAnimation(1.0f);
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void BorderlessWindow::DismissAlert() {
+    app_alert_.RequestClose();
+    StartAlertAnimation(0.0f);
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void BorderlessWindow::StartAlertAnimation(float target) {
+    alert_anim_from_   = alert_anim_t_;
+    alert_anim_target_ = target;
+    alert_anim_start_  = ::GetTickCount();
+    if (alert_timer_id_ == 0) {
+        alert_timer_id_ = ::SetTimer(hwnd_, kAlertTimerId,
+                                     kAlertTimerPeriod, nullptr);
+    }
+}
+
+void BorderlessWindow::OnAlertTimer() {
+    const DWORD now = ::GetTickCount();
+    const DWORD dt  = now - alert_anim_start_;
+    const float total = static_cast<float>(theme::kAlertAnimDurationMs);
+    const float u = std::clamp(static_cast<float>(dt) / total, 0.0f, 1.0f);
+
+    alert_anim_t_ = alert_anim_from_
+                  + (alert_anim_target_ - alert_anim_from_) * u;
+    app_alert_.SetProgress(alert_anim_t_);
+
+    if (u >= 1.0f) {
+        ::KillTimer(hwnd_, alert_timer_id_);
+        alert_timer_id_ = 0;
+        if (alert_anim_target_ <= 0.0f) {
+            app_alert_.SetOpen(false);
+        }
+    }
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -474,6 +547,12 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
         // trigger a window drag or resize.
         return HTCLIENT;
     }
+    if (app_alert_.IsOpen()) {
+        // Alert is modal: the scrim catches every click below the
+        // caption strip. Keep the strip itself draggable (the user can
+        // still move the window with a dialog up, like macOS sheets).
+        if (wy >= captionHpx) return HTCLIENT;
+    }
     if (wy < captionHpx) {
         return HTCAPTION;
     }
@@ -546,6 +625,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const int sqW = std::max(1, static_cast<int>(LOWORD(lp)) - 2 * marginPx);
             caption_button_.UpdateLayout(sqW, dpi_);
             RelayoutCaptionMenu();
+            RelayoutAppAlert();
             SyncPtyToSize();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
@@ -569,9 +649,28 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             // Esc dismisses the caption menu without sending Esc to the
             // shell; only when the menu is actually showing, otherwise
             // the shell is still in charge of Esc.
+            if (wp == VK_ESCAPE && app_alert_.IsOpen() && !app_alert_.IsClosing()) {
+                DismissAlert();
+                return 0;
+            }
             if (wp == VK_ESCAPE && caption_menu_.IsOpen()) {
                 StartMenuAnimation(0.0f);
                 ::InvalidateRect(hwnd_, nullptr, FALSE);
+                return 0;
+            }
+
+            // Enter / Space commits the alert (acts as the primary
+            // button click). Mirrors the keyboard contract of every
+            // native macOS alert and Win32 MessageBox.
+            if (app_alert_.IsOpen() && !app_alert_.IsClosing() &&
+                (wp == VK_RETURN || wp == VK_SPACE)) {
+                DismissAlert();
+                return 0;
+            }
+
+            // While an alert is on screen the shell is frozen out: don't
+            // forward keystrokes to the pty until the dialog is gone.
+            if (app_alert_.IsOpen()) {
                 return 0;
             }
 
@@ -637,6 +736,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_CHAR:
         case WM_SYSCHAR: {
             if (!session_) break;
+            if (app_alert_.IsOpen()) return 0;
             char buf[8];
             const size_t n = terminal::TranslateChar(static_cast<wchar_t>(wp),
                                                      buf, sizeof(buf));
@@ -662,6 +762,10 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 OnMenuTimer();
                 return 0;
             }
+            if (wp == kAlertTimerId) {
+                OnAlertTimer();
+                return 0;
+            }
             break;
 
         case WM_SETFOCUS:
@@ -677,11 +781,12 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             traffic_.OnMouseMove(wx, wy);
             caption_button_.OnMouseMove(wx, wy);
             caption_menu_.OnMouseMove(wx, wy);
+            app_alert_.OnMouseMove(wx, wy);
 
             TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
             ::TrackMouseEvent(&tme);
 
-            if (selecting_ && session_) {
+            if (selecting_ && session_ && !app_alert_.IsOpen()) {
                 int viewRow = 0, col = 0;
                 if (ContentPointToCell(wx, wy, viewRow, col)) {
                     auto& buf = session_->Buffer();
@@ -698,6 +803,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             traffic_.OnMouseLeave();
             caption_button_.OnMouseLeave();
             caption_menu_.OnMouseLeave();
+            app_alert_.OnMouseLeave();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
 
@@ -706,6 +812,17 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const int wx = GET_X_LPARAM(lp) - marginPx;
             const int wy = GET_Y_LPARAM(lp) - marginPx;
             ::SetCapture(hwnd_);
+
+            // Modal app alert: clicks inside the panel route to the
+            // alert; clicks on the scrim stay swallowed (no dismiss on
+            // outside-click, mirroring native macOS modal alerts).
+            if (app_alert_.IsOpen() && !app_alert_.IsClosing()) {
+                if (app_alert_.HitTestPanel(wx, wy)) {
+                    app_alert_.OnLButtonDown(wx, wy);
+                }
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+                break;
+            }
 
             // Caption menu is modal-ish: if it's showing, all click-down
             // routes through it first. A click on the menu rows arms the
@@ -753,6 +870,14 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
             const int wx = GET_X_LPARAM(lp) - marginPx;
             const int wy = GET_Y_LPARAM(lp) - marginPx;
+
+            if (app_alert_.IsOpen() && !app_alert_.IsClosing()) {
+                // Alert in front: any click here is its own. The button
+                // fires its OnDismiss when the user releases on it.
+                app_alert_.OnLButtonUp(wx, wy);
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+                break;
+            }
 
             if (caption_menu_.IsOpen() && caption_menu_.HitTest(wx, wy)) {
                 // Pick fired -> the item handler runs synchronously and
@@ -802,12 +927,14 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         // Right-click: paste (xterm convention). Easier than fishing for
         // the middle button, which laptops rarely have.
         case WM_RBUTTONUP: {
+            if (app_alert_.IsOpen()) return 0;
             PasteFromClipboard();
             return 0;
         }
 
         case WM_MOUSEWHEEL: {
             if (!session_) break;
+            if (app_alert_.IsOpen()) return 0;
             const int delta = GET_WHEEL_DELTA_WPARAM(wp);
             // Lines per wheel notch from the OS. Returns WHEEL_PAGESCROLL
             // for "Scroll one page".
@@ -839,7 +966,8 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_PAINT:
-            renderer_.Render(active_, traffic_, caption_button_, caption_menu_);
+            renderer_.Render(active_, traffic_, caption_button_,
+                             caption_menu_, app_alert_);
             ::ValidateRect(hwnd_, nullptr);
             return 0;
 

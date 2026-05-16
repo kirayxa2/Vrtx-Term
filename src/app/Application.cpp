@@ -36,39 +36,52 @@ int Application::Run(HINSTANCE hInstance) {
     // initial SyncPtyToSize, so we don't need to know the geometry here -
     // we just have to pick *some* sane starting grid for Start() before
     // the first WM_SIZE arrives.
-    if (!session_.Start(80, 24)) {
+    bool sessionStarted = session_.Start(80, 24);
+    if (!sessionStarted) {
         Trace("session start FAILED");
-        ::MessageBoxW(nullptr,
-                      L"Failed to launch a shell. PowerShell, pwsh, "
-                      L"powershell.exe and cmd.exe were all unreachable.",
-                      L"MacTermWin", MB_OK | MB_ICONERROR);
     } else {
         Trace("session started");
     }
     window_.SetSession(&session_);
     Trace("session bound to window");
 
+    const LANGID langId = ::GetUserDefaultUILanguage();
+    const bool   ru     = (PRIMARYLANGID(langId) == LANG_RUSSIAN);
+
+    // If the shell wouldn't launch, surface the failure as one of our
+    // own alerts (no MessageBoxW). The terminal stays empty until the
+    // user dismisses; they can then close the window with the close
+    // traffic light.
+    if (!sessionStarted) {
+        window_.ShowAlert(
+            ru ? L"Не удалось запустить оболочку"
+               : L"Failed to launch a shell",
+            ru ? L"PowerShell, pwsh, powershell.exe и cmd.exe оказались "
+                 L"недоступны. Установите PowerShell или проверьте PATH "
+                 L"и попробуйте снова."
+               : L"PowerShell, pwsh, powershell.exe and cmd.exe were all "
+                 L"unreachable. Install PowerShell or check PATH and try again.",
+            L"OK");
+    }
+
     // Populate the caption-menu with default items. Labels are localised
     // by the user's UI language: Russian if the primary language is RU,
     // English otherwise. The handlers run synchronously on the UI thread
     // when the user picks an item, so they're free to touch HWNDs.
     {
-        const LANGID langId = ::GetUserDefaultUILanguage();
-        const bool   ru     = (PRIMARYLANGID(langId) == LANG_RUSSIAN);
-
         auto& menu = window_.GetCaptionMenu();
 
         // Settings: not yet implemented; show a quick tooltip-equivalent
-        // via MessageBox so the user can confirm the wiring works.
+        // via the in-window alert so the user can confirm the wiring works.
         menu.AddItem({
             L"\u2699",   // U+2699 GEAR
             ru ? L"Настройки" : L"Settings",
-            [hwnd = window_.Hwnd(), ru]() {
-                ::MessageBoxW(hwnd,
+            [this, ru]() {
+                window_.ShowAlert(
+                    ru ? L"Настройки" : L"Settings",
                     ru ? L"Окно настроек ещё не готово."
                        : L"Settings UI is not implemented yet.",
-                    ru ? L"Настройки" : L"Settings",
-                    MB_OK | MB_ICONINFORMATION);
+                    L"OK");
             }
         });
 
@@ -88,12 +101,12 @@ int Application::Run(HINSTANCE hInstance) {
         menu.AddItem({
             L"\u2139",   // U+2139 INFORMATION SOURCE
             ru ? L"О программе" : L"About",
-            [hwnd = window_.Hwnd(), ru]() {
-                ::MessageBoxW(hwnd,
+            [this, ru]() {
+                window_.ShowAlert(
+                    ru ? L"О программе" : L"About",
                     ru ? L"MacTermWin\nТерминал в стиле macOS Tahoe для Windows."
                        : L"MacTermWin\nA macOS Tahoe-styled terminal for Windows.",
-                    ru ? L"О программе" : L"About",
-                    MB_OK | MB_ICONINFORMATION);
+                    L"OK");
             }
         });
     }

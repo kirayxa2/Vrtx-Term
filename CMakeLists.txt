@@ -69,6 +69,7 @@ set(MACTERMWIN_SOURCES
     src/ui/TrafficLights.cpp
     src/ui/CaptionButton.cpp
     src/ui/CaptionMenu.cpp
+    src/ui/AppAlert.cpp
 
     src/theme/TahoeTheme.cpp
 )
@@ -96,6 +97,7 @@ set(MACTERMWIN_HEADERS
     src/ui/TrafficLights.h
     src/ui/CaptionButton.h
     src/ui/CaptionMenu.h
+    src/ui/AppAlert.h
 
     src/theme/TahoeTheme.h
 )
