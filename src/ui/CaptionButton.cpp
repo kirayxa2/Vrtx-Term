@@ -15,14 +15,16 @@ void CaptionButton::UpdateLayout(int squircleWidthPx, UINT dpi) {
 
     const float d        = ToPx(kCaptionButtonDiameter, dpi);
     const float insetX   = ToPx(kCaptionButtonInsetX,   dpi);
+    const float offsetY  = ToPx(kCaptionButtonOffsetY,  dpi);
     const float captionH = ToPx(kCaptionHeight,         dpi);
 
     // Right-anchored at the squircle's right edge inset by `insetX`,
-    // vertically centred on the caption strip. The button is a perfect
-    // circle, so width == height == diameter.
+    // vertically centred on the caption strip with a small downward
+    // offset to optically balance the squircle's curving top edge.
+    // The button is a perfect circle, so width == height == diameter.
     const float right = static_cast<float>(squircleWidthPx) - insetX;
     const float left  = right - d;
-    const float cy    = captionH * 0.5f;
+    const float cy    = captionH * 0.5f + offsetY;
     const float top   = cy - d * 0.5f;
     const float bot   = cy + d * 0.5f;
 
@@ -125,42 +127,39 @@ void CaptionButton::Render(ID2D1DeviceContext* dc,
 
     // ---- Chevron-down glyph --------------------------------------------
     //
-    // Apple's SF Symbol "chevron.down" is a sharp V: two thin strokes that
-    // meet at a pointed apex. The legs are noticeably longer than they are
-    // tall, and the stroke is *thin* relative to the disc so the glyph
-    // reads as a pointer, not a chunky arrow.
+    // Apple's SF Symbol "chevron.down" (Regular weight, scale Medium) is
+    // a thin V centred horizontally and vertically on the disc.
     //
-    // Proportions reverse-engineered from the WWDC25 reference (button
-    // 26pt, chevron ~10pt wide x 3.5pt tall, stroke 1.5pt):
-    //   half-span horizontally = ~38% of the disc radius
-    //   half-span vertically   = ~14% of the disc radius
-    //   stroke                 = ~11% of the disc diameter
-    const float chevW = r * 0.38f;
-    const float chevH = r * 0.14f;
+    // Reverse-engineered proportions from a high-res macOS Tahoe Mail
+    // toolbar capture, normalised to a 28pt button:
+    //   chevron width  = ~36% of the disc diameter
+    //   chevron height = ~20% of the disc diameter
+    //   stroke         = ~7%  of the disc diameter
+    //
+    // The 1.8:1 width-to-height ratio + thin stroke produce the flat,
+    // wide, light V that reads as Apple's chevron rather than a generic
+    // chunky "v". Geometric centring (midpoint of the bounding box on the
+    // disc centre) is correct here - SF Symbols already bakes the visual
+    // balance into its glyph metrics.
+    const float diameter = r * 2.0f;
+    const float halfW    = diameter * 0.18f;   // half of chevron width
+    const float halfH    = diameter * 0.10f;   // half of chevron height
 
-    // Centre the glyph optically: shift it up a hair so the apex (lowest
-    // point) sits on the geometric centre, rather than the midpoint
-    // between the two endpoints. Without this the V looks bottom-heavy.
-    const float yShift = chevH * 0.5f;
-
-    const D2D1_POINT_2F p_left  {cx - chevW, cy - chevH - yShift};
-    const D2D1_POINT_2F p_tip   {cx,         cy + chevH - yShift};
-    const D2D1_POINT_2F p_right {cx + chevW, cy - chevH - yShift};
+    const D2D1_POINT_2F p_left  {cx - halfW, cy - halfH};
+    const D2D1_POINT_2F p_tip   {cx,         cy + halfH};
+    const D2D1_POINT_2F p_right {cx + halfW, cy - halfH};
 
     const theme::Color glyphCol = windowActive ? pal.captionButtonGlyph
                                                : pal.tlInactive;
     brush->SetColor(ToD2D(glyphCol));
 
-    // Stroke ~11% of the disc diameter; clamp >= 1.5px so anti-aliasing
-    // doesn't fade the chevron into nothing at small sizes. This is
-    // distinctly thinner than what we had before (was ~18% of radius =
-    // ~36% of diameter), which made the chevron feel chunky and squat.
-    const float chevStroke = std::max(1.5f, r * 0.22f);
+    const float chevStroke = std::max(1.5f, diameter * 0.07f);
 
-    // Apex must be a sharp corner: round join would soften the V into a
-    // U. Miter join with a generous limit keeps the point crisp. The
-    // stroke endpoints (top of each leg) stay round so they fade out
-    // gracefully against the disc fill.
+    // SF Symbols chevrons use round caps + round join. Drawing as a
+    // single polyline (not two separate lines) is critical: round-join
+    // at the apex gives a smooth point, whereas two independent
+    // `DrawLine` calls would render two overlapping round caps and bake
+    // them into a chunky bulge.
     ComPtr<ID2D1StrokeStyle> ss;
     D2D1_STROKE_STYLE_PROPERTIES props{};
     props.startCap   = D2D1_CAP_STYLE_ROUND;
@@ -169,8 +168,6 @@ void CaptionButton::Render(ID2D1DeviceContext* dc,
     props.miterLimit = 4.0f;
     factory->CreateStrokeStyle(props, nullptr, 0, ss.GetAddressOf());
 
-    // Build a single continuous polyline so the apex uses lineJoin (not
-    // two independent strokes whose round caps overlap into a fat blob).
     ComPtr<ID2D1PathGeometry> path;
     factory->CreatePathGeometry(path.GetAddressOf());
     ComPtr<ID2D1GeometrySink> sink;

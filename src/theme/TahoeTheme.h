@@ -79,10 +79,18 @@ inline constexpr float kTrafficLightInsetX   = 11.0f;
 // hairline outline that mirrors the window border. Hover lifts the fill
 // a touch; press lifts it slightly more.
 //
-// Width == Height == diameter. The right inset mirrors
-// `kTrafficLightInsetX` so the chrome reads as left-right symmetric.
-inline constexpr float kCaptionButtonDiameter = 26.0f;
-inline constexpr float kCaptionButtonInsetX   = 8.0f;
+// Width == Height == diameter. The right inset is tighter than the
+// traffic-lights' left inset by design - Apple anchors the toolbar
+// affordance closer to the corner so the chrome reads asymmetrically
+// (chunkier on the close-side, leaner on the far edge).
+//
+// kCaptionButtonOffsetY nudges the disc downward by a fraction of a pt
+// to compensate for the squircle's top corner curve - without it the
+// button looks slightly too high relative to the visual centre of the
+// caption strip.
+inline constexpr float kCaptionButtonDiameter = 28.0f;
+inline constexpr float kCaptionButtonInsetX   = 6.0f;
+inline constexpr float kCaptionButtonOffsetY  = 1.0f;
 
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
