@@ -223,14 +223,59 @@ inline constexpr float kSettingsRowsTopGap        =  8.0f;   // traffic band -> 
 inline constexpr float kSettingsSidebarBottomGap  = 12.0f;
 inline constexpr float kSettingsContentPaddingX   = 12.0f;   // gutter inside content area
 inline constexpr float kSettingsContentPaddingTop = 14.0f;   // caption -> title
-inline constexpr float kSettingsTitleSize         = 28.0f;   // pane title
-inline constexpr float kSettingsTitleBottomGap    = 16.0f;
+inline constexpr float kSettingsTitleSize         = 22.0f;   // pane title (Tahoe System Settings is ~22pt)
+inline constexpr float kSettingsTitleBottomGap    = 14.0f;
 inline constexpr float kSettingsBodyTextSize      = 13.0f;
 inline constexpr float kSettingsDoneWidth         = 88.0f;   // primary Done pill
 inline constexpr float kSettingsDoneHeight        = 22.0f;   // matches caption-button vertical centre
 inline constexpr float kSettingsDoneTextSize      = 13.0f;
 inline constexpr float kSettingsDoneInsetX        =  8.0f;   // squircle right -> Done right
 inline constexpr int   kSettingsAnimDurationMs    = 260;
+
+// ---- Settings sidebar pill outline ----------------------------------------
+//
+// Mirrors the window's own 1pt hairline. Gives the pill the same
+// "carved out of glass" silhouette the squircle has, instead of a
+// solid silhouette that floats inside the content area.
+inline constexpr float kSettingsSidebarBorderWidth = 1.0f;
+
+// ---- Settings content cards (Apple grouped table) -------------------------
+//
+// Tahoe System Settings groups rows into rounded "cards" stacked
+// vertically. Each card has:
+//   * an optional small all-caps header above (13pt, secondary text)
+//   * a translucent rounded fill (radius 12pt)
+//   * rows separated by a 1pt hairline that does NOT touch the card edges
+//
+// We model this with `Section { header, rows[] }`. The renderer walks
+// the active item's sections from top to bottom inside the content
+// pane.
+inline constexpr float kSettingsCardRadius        = 12.0f;
+inline constexpr float kSettingsCardSpacing       = 18.0f;   // between cards
+inline constexpr float kSettingsCardPaddingX      = 16.0f;   // inside row, horizontal
+inline constexpr float kSettingsCardRowHeight     = 44.0f;   // Apple stock
+inline constexpr float kSettingsCardSeparatorInset= 16.0f;   // hairline left inset
+inline constexpr float kSettingsCardSeparatorWidth=  1.0f;   // hairline thickness
+inline constexpr float kSettingsSectionHeaderSize = 13.0f;
+inline constexpr float kSettingsSectionHeaderGap  =  6.0f;   // header -> card top
+inline constexpr float kSettingsRowLabelSize      = 13.0f;
+inline constexpr float kSettingsRowValueSize      = 13.0f;
+inline constexpr float kSettingsRowChevronSize    = 11.0f;   // the > glyph
+inline constexpr float kSettingsRowChevronGap     =  6.0f;   // value -> chevron
+inline constexpr float kSettingsRowEndPadding     = 14.0f;   // right edge breathing room
+
+// Toggle (UISwitch). Apple's switch is 38x22 with an 18pt knob.
+inline constexpr float kSettingsToggleWidth       = 38.0f;
+inline constexpr float kSettingsToggleHeight      = 22.0f;
+inline constexpr float kSettingsToggleKnob        = 18.0f;
+inline constexpr float kSettingsToggleKnobInset   =  2.0f;   // knob -> pill edge
+
+// Section "footer" — a small grey paragraph sometimes drawn UNDER a
+// card (Apple uses it for "Privacy notice" style explainers). Same
+// font as the section header but slightly larger leading.
+inline constexpr float kSettingsFooterTextSize    = 12.0f;
+inline constexpr float kSettingsFooterTopGap      =  6.0f;   // card -> footer
+inline constexpr float kSettingsFooterBottomGap   = 14.0f;   // footer -> next card
 
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
@@ -328,6 +373,7 @@ struct Palette {
     // gutter. Tile colours are the canonical SF Symbols-tinted
     // backgrounds Apple uses for category icons.
     Color settingsSidebarFill;  // floating sidebar pill fill
+    Color settingsSidebarBorder;// 1pt hairline around the sidebar pill
     Color settingsRowHover;     // hovered sidebar row overlay
     Color settingsRowActive;    // selected sidebar row fill (system accent)
     Color settingsRowText;      // sidebar row label
@@ -339,6 +385,22 @@ struct Palette {
     Color settingsDoneFill;     // primary Done button (caption strip)
     Color settingsDoneHover;    // Done hover overlay (additive)
     Color settingsDoneText;     // Done glyph colour
+
+    // Content cards (Apple grouped table). Each "Section" renders as
+    // one of these cards with rows inside it.
+    Color settingsCardFill;       // rounded card background
+    Color settingsCardBorder;     // 1pt hairline around the card
+    Color settingsCardSeparator;  // 1pt hairline between rows
+    Color settingsSectionHeader;  // small grey label above each card
+    Color settingsRowLabel;       // primary row text
+    Color settingsRowValue;       // trailing value text (e.g. "Tahoe Dark")
+    Color settingsRowChevron;     // disclosure chevron glyph
+    Color settingsRowFooter;      // small description paragraph under cards
+
+    // Toggle (UISwitch).
+    Color settingsToggleOff;      // pill fill when off
+    Color settingsToggleOn;       // pill fill when on (system green)
+    Color settingsToggleKnob;     // knob colour
 
     // Text
     Color text;
@@ -396,6 +458,7 @@ inline constexpr Palette kDarkPalette{
     .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
 
     .settingsSidebarFill   = Color::FromARGB(0xFF26262A),
+    .settingsSidebarBorder = Color::FromARGB(0x33FFFFFF),
     .settingsRowHover      = Color::FromARGB(0x1AFFFFFF),
     .settingsRowActive     = Color::FromARGB(0xFF0A84FF),
     .settingsRowText       = Color::FromARGB(0xFFEDEDEF),
@@ -407,6 +470,19 @@ inline constexpr Palette kDarkPalette{
     .settingsDoneFill      = Color::FromARGB(0xFF0A84FF),
     .settingsDoneHover     = Color::FromARGB(0x22FFFFFF),
     .settingsDoneText      = Color::FromARGB(0xFFFFFFFF),
+
+    .settingsCardFill      = Color::FromARGB(0xFF2C2C30),
+    .settingsCardBorder    = Color::FromARGB(0x1AFFFFFF),
+    .settingsCardSeparator = Color::FromARGB(0x1FFFFFFF),
+    .settingsSectionHeader = Color::FromARGB(0x99EDEDEF),
+    .settingsRowLabel      = Color::FromARGB(0xFFEDEDEF),
+    .settingsRowValue      = Color::FromARGB(0xB3EDEDEF),
+    .settingsRowChevron    = Color::FromARGB(0x80EDEDEF),
+    .settingsRowFooter     = Color::FromARGB(0x80EDEDEF),
+
+    .settingsToggleOff     = Color::FromARGB(0xFF48484A),
+    .settingsToggleOn      = Color::FromARGB(0xFF34C759),
+    .settingsToggleKnob    = Color::FromARGB(0xFFFFFFFF),
 
     .text      = Color::FromARGB(0xFFEDEDEF),
     .textMuted = Color::FromARGB(0x99EDEDEF),
@@ -467,6 +543,7 @@ inline constexpr Palette kLightPalette{
     .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
 
     .settingsSidebarFill   = Color::FromARGB(0xFFEDEDEF),
+    .settingsSidebarBorder = Color::FromARGB(0x22000000),
     .settingsRowHover      = Color::FromARGB(0x10000000),
     .settingsRowActive     = Color::FromARGB(0xFF007AFF),
     .settingsRowText       = Color::FromARGB(0xFF1A1A1C),
@@ -478,6 +555,19 @@ inline constexpr Palette kLightPalette{
     .settingsDoneFill      = Color::FromARGB(0xFF007AFF),
     .settingsDoneHover     = Color::FromARGB(0x14000000),
     .settingsDoneText      = Color::FromARGB(0xFFFFFFFF),
+
+    .settingsCardFill      = Color::FromARGB(0xFFFFFFFF),
+    .settingsCardBorder    = Color::FromARGB(0x14000000),
+    .settingsCardSeparator = Color::FromARGB(0x1A000000),
+    .settingsSectionHeader = Color::FromARGB(0x991A1A1C),
+    .settingsRowLabel      = Color::FromARGB(0xFF1A1A1C),
+    .settingsRowValue      = Color::FromARGB(0x991A1A1C),
+    .settingsRowChevron    = Color::FromARGB(0x801A1A1C),
+    .settingsRowFooter     = Color::FromARGB(0x801A1A1C),
+
+    .settingsToggleOff     = Color::FromARGB(0xFFD1D1D6),
+    .settingsToggleOn      = Color::FromARGB(0xFF34C759),
+    .settingsToggleKnob    = Color::FromARGB(0xFFFFFFFF),
 
     .text      = Color::FromARGB(0xFF1A1A1C),
     .textMuted = Color::FromARGB(0x991A1A1C),
