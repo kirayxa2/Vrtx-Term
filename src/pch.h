@@ -34,6 +34,9 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
+#include <cwchar>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stdexcept>

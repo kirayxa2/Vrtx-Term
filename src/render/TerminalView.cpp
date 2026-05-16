@@ -84,29 +84,11 @@ void TerminalView::BuildFontFallback() {
         return;
     }
 
-    // (range, font-family-list) pairs. AddMappings checks each family in
-    // the order given; the first one that exists on the system wins.
     struct Mapping {
         DWRITE_UNICODE_RANGE        range;
         std::vector<const wchar_t*> families;
     };
 
-    // Nerd Font icon ranges. Sources: https://www.nerdfonts.com/cheat-sheet
-    //
-    //   E000..E0FF  Powerline / Powerline Extra
-    //   E0A0..E0D7  Powerline glyphs proper
-    //   E200..E2A9  Font Awesome Extension
-    //   E300..E3D2  Weather Icons
-    //   E5FA..E62F  Seti UI / custom file icons
-    //   E700..E7C5  Devicons
-    //   F000..F2E0  Font Awesome
-    //   F300..F385  Font Logos
-    //   F400..F532  Octicons
-    //   F500..F8FF  Material Design Icons (subset)
-    //
-    // Easier: just cover the entire PUA in one mapping. Anything in there
-    // that the Nerd Font *doesn't* cover, the chain falls through to
-    // Segoe UI Symbol / system fallback.
     const std::vector<const wchar_t*> kNerdFonts = {
         L"CaskaydiaCove Nerd Font Mono",
         L"CaskaydiaCove Nerd Font",
@@ -121,31 +103,21 @@ void TerminalView::BuildFontFallback() {
         L"Hack NF",
         L"Symbols Nerd Font Mono",
         L"Symbols Nerd Font",
-        // Microsoft fallbacks (always installed on Win10+):
         L"Segoe UI Symbol",
         L"Segoe MDL2 Assets",
         L"Segoe Fluent Icons",
     };
 
     const Mapping mappings[] = {
-        // Primary BMP PUA - where most Nerd Font icons live.
-        { {0xE000, 0xF8FF}, kNerdFonts },
-        // Supplementary PUA-A - some Material Design Icons live here.
+        { {0xE000, 0xF8FF},   kNerdFonts },
         { {0xF0000, 0xFFFFD}, kNerdFonts },
-        // Emoji blocks. Listed separately so colour-emoji fonts win.
         { {0x1F300, 0x1FAFF}, {L"Segoe UI Emoji", L"Segoe UI Symbol"} },
         { {0x2600,  0x27BF},  {L"Segoe UI Emoji", L"Segoe UI Symbol"} },
-        // Box-drawing + block elements. Cascadia covers these but if the
-        // user picks a font that doesn't, fall through to a known-good one.
         { {0x2500,  0x259F},  {L"Cascadia Mono", L"Consolas",
                                 L"DejaVu Sans Mono"} },
     };
 
     for (const auto& m : mappings) {
-        // Note: this is AddMapping (singular), not AddMappings. The
-        // plural AddMappings in this interface takes a single
-        // IDWriteFontFallback* and merges all its mappings. AddMapping
-        // is the one that takes range + family list.
         std::vector<const wchar_t*> ptrs(m.families.begin(), m.families.end());
         builder->AddMapping(&m.range, 1,
                             ptrs.data(), static_cast<UINT32>(ptrs.size()),
@@ -155,9 +127,6 @@ void TerminalView::BuildFontFallback() {
                             /*scale=*/1.0f);
     }
 
-    // Append the system default as the very last resort. Without this
-    // step our custom fallback REPLACES the system one, and any glyph
-    // outside the ranges above falls back to nothing.
     ComPtr<IDWriteFontFallback> systemFallback;
     if (SUCCEEDED(dwrite2_->GetSystemFontFallback(systemFallback.GetAddressOf()))) {
         builder->AddMappings(systemFallback.Get());
@@ -189,9 +158,6 @@ void TerminalView::RebuildFormats() {
         dst->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
         dst->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
 
-        // Apply our Nerd Font + emoji fallback chain. Requires
-        // IDWriteTextFormat2 (Win 8.1+); QI silently no-ops on older
-        // platforms, where users will still see boxes for icons.
         if (fallback_) {
             ComPtr<IDWriteTextFormat2> tf2;
             if (SUCCEEDED(dst.As(&tf2)) && tf2) {
@@ -206,11 +172,6 @@ void TerminalView::RebuildFormats() {
     make(DWRITE_FONT_WEIGHT_BOLD,    DWRITE_FONT_STYLE_ITALIC, fmt_bold_italic_);
 
     // ---- Cell metrics ---------------------------------------------------
-    //
-    // For a monospace face the advance of any printable ASCII glyph equals
-    // the cell width. We measure "M" in the Regular format. Height comes
-    // from font metrics, scaled to design units, then multiplied by our
-    // line-height factor.
     ComPtr<IDWriteTextLayout> probe;
     const wchar_t kSample[] = L"M";
     ThrowIfFailed(dwrite_->CreateTextLayout(
@@ -223,7 +184,6 @@ void TerminalView::RebuildFormats() {
     probe->GetMetrics(&tm);
     cell_w_px_ = std::max(1.0f, tm.widthIncludingTrailingWhitespace);
 
-    // Accurate font metrics for the cell height + baseline.
     ComPtr<IDWriteFontCollection> fontColl;
     fmt_regular_->GetFontCollection(fontColl.GetAddressOf());
 
@@ -259,7 +219,6 @@ void TerminalView::RebuildFormats() {
                                  theme::kTerminalLineHeight);
         baseline_px_ = ascent;
     } else {
-        // Fallback if the font lookup failed for any reason.
         cell_h_px_   = std::ceil(font_size_px_ * 1.6f);
         baseline_px_ = font_size_px_ * 0.8f;
     }
@@ -306,38 +265,70 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
     ComPtr<ID2D1SolidColorBrush> fillBrush;
     dc->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 1), fillBrush.GetAddressOf());
 
-    const terminal::Cell* cells = buf.Cells();
+    // Snapshot the visible viewport into a flat array of cells. This costs
+    // one extra copy per frame but keeps the rest of the drawing code in
+    // its existing flat-grid form, and the copy is microseconds for any
+    // realistic grid size (200x60 = 12k cells, 16 bytes each = 192 KB).
+    std::vector<terminal::Cell> cells(static_cast<size_t>(cols) * rows);
+    for (int r = 0; r < rows; ++r) {
+        buf.GetViewportRow(r, cells.data() + static_cast<size_t>(r) * cols);
+    }
+
+    // Selection highlight colour. Apple uses a translucent accent; we
+    // pre-multiply because the swap chain is premul-alpha.
+    const D2D1_COLOR_F selBg = D2D1::ColorF(0.27f, 0.42f, 0.83f, 0.85f);
+    const D2D1_COLOR_F selFg = D2D1::ColorF(1.0f,  1.0f,  1.0f,  1.0f);
+
+    // Whether the user is looking at the live bottom of the buffer. The
+    // cursor only renders when this is true (we don't want it floating
+    // over scrolled-back content).
+    const bool atBottom = (buf.ViewportOffset() == 0);
 
     // ---- Pass 1: background runs --------------------------------------
-    //
-    // Coalesce contiguous cells that share the same effective bg into one
-    // FillRectangle. The "default" bg matches the squircle fill that's
-    // already on the canvas, so we *skip* drawing those runs entirely -
-    // saves ~80% of fills for typical shell output.
     for (int r = 0; r < rows; ++r) {
-        const float y = originY + r * cell_h_px_;
+        const float y    = originY + r * cell_h_px_;
+        const int64_t ar = buf.ViewportRowToAbs(r);
         int c = 0;
         while (c < cols) {
             const auto& cell = cells[r * cols + c];
-            const bool reverse = (cell.attrs & terminal::attr::kReverse) != 0;
-            auto bgC = reverse ? cell.fg : cell.bg;
-            const D2D1_COLOR_F bg = ResolveColor(bgC, pal, /*isBg=*/!reverse);
+            const bool selected = buf.IsCellSelected(ar, c);
+            const bool reverse  = (cell.attrs & terminal::attr::kReverse) != 0;
 
-            // Skip default bg (== window tint), no need to fill.
-            const bool isDefaultBg = (bgC.mode == terminal::CellColor::Mode::Default) &&
-                                     !reverse;
+            D2D1_COLOR_F bg;
+            bool drawBg;
+            if (selected) {
+                bg     = selBg;
+                drawBg = true;
+            } else {
+                auto bgC = reverse ? cell.fg : cell.bg;
+                bg = ResolveColor(bgC, pal, /*isBg=*/!reverse);
+                drawBg = !((bgC.mode == terminal::CellColor::Mode::Default) &&
+                           !reverse);
+            }
 
             int runEnd = c + 1;
             while (runEnd < cols) {
                 const auto& nx = cells[r * cols + runEnd];
+                const bool nxSel = buf.IsCellSelected(ar, runEnd);
                 const bool nxRev = (nx.attrs & terminal::attr::kReverse) != 0;
-                auto nxBgC = nxRev ? nx.fg : nx.bg;
-                const D2D1_COLOR_F nxBg = ResolveColor(nxBgC, pal, /*isBg=*/!nxRev);
-                if (!ColorsEqual(nxBg, bg)) break;
+
+                D2D1_COLOR_F nxBg;
+                bool nxDraw;
+                if (nxSel) {
+                    nxBg = selBg; nxDraw = true;
+                } else {
+                    auto nxBgC = nxRev ? nx.fg : nx.bg;
+                    nxBg = ResolveColor(nxBgC, pal, /*isBg=*/!nxRev);
+                    nxDraw = !((nxBgC.mode == terminal::CellColor::Mode::Default) &&
+                               !nxRev);
+                }
+
+                if (nxDraw != drawBg)              break;
+                if (drawBg && !ColorsEqual(nxBg, bg)) break;
                 ++runEnd;
             }
 
-            if (!isDefaultBg) {
+            if (drawBg) {
                 fillBrush->SetColor(bg);
                 D2D1_RECT_F r2{
                     originX + c        * cell_w_px_,
@@ -352,22 +343,25 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
     }
 
     // ---- Pass 2: glyph runs --------------------------------------------
-    //
-    // For each row, group runs of cells with identical (fg, bold, italic).
-    // Skip purely-blank runs (no need to render space glyphs over an
-    // already-painted background). Build a UTF-16 string and DrawTextW it
-    // at the run's origin. DirectWrite handles all kerning/anti-aliasing.
     std::wstring runText;
     runText.reserve(static_cast<size_t>(cols) + 8);
 
     for (int r = 0; r < rows; ++r) {
-        const float y = originY + r * cell_h_px_;
+        const float y    = originY + r * cell_h_px_;
+        const int64_t ar = buf.ViewportRowToAbs(r);
         int c = 0;
         while (c < cols) {
             const auto& cell = cells[r * cols + c];
-            const bool reverse = (cell.attrs & terminal::attr::kReverse) != 0;
-            const auto& fgSrc  = reverse ? cell.bg : cell.fg;
-            const D2D1_COLOR_F fg = ResolveColor(fgSrc, pal, /*isBg=*/reverse);
+            const bool selected = buf.IsCellSelected(ar, c);
+            const bool reverse  = (cell.attrs & terminal::attr::kReverse) != 0;
+
+            D2D1_COLOR_F fg;
+            if (selected) {
+                fg = selFg;
+            } else {
+                const auto& fgSrc = reverse ? cell.bg : cell.fg;
+                fg = ResolveColor(fgSrc, pal, /*isBg=*/reverse);
+            }
             const uint16_t a = cell.attrs &
                                (terminal::attr::kBold | terminal::attr::kItalic);
             IDWriteTextFormat* fmt = FormatFor(a);
@@ -375,20 +369,22 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
             int runEnd = c + 1;
             while (runEnd < cols) {
                 const auto& nx = cells[r * cols + runEnd];
+                const bool nxSel = buf.IsCellSelected(ar, runEnd);
                 const bool nxRev = (nx.attrs & terminal::attr::kReverse) != 0;
-                const auto& nxFg = nxRev ? nx.bg : nx.fg;
-                const D2D1_COLOR_F nxFgC = ResolveColor(nxFg, pal, nxRev);
+
+                D2D1_COLOR_F nxFg;
+                if (nxSel) {
+                    nxFg = selFg;
+                } else {
+                    const auto& nxFgSrc = nxRev ? nx.bg : nx.fg;
+                    nxFg = ResolveColor(nxFgSrc, pal, nxRev);
+                }
                 const uint16_t nxA = nx.attrs &
                                      (terminal::attr::kBold | terminal::attr::kItalic);
-                if (!ColorsEqual(nxFgC, fg) || nxA != a) break;
+                if (!ColorsEqual(nxFg, fg) || nxA != a) break;
                 ++runEnd;
             }
 
-            // Build the wide-string for the run. Box-drawing and block
-            // glyphs are rendered ourselves via FillRectangle so they tile
-            // seamlessly across cells regardless of line-height; we set
-            // the codepoint to U+0020 in the run-text so DirectWrite skips
-            // it, then call box::DrawGlyph for that cell directly.
             runText.clear();
             bool anyVisible = false;
             for (int k = c; k < runEnd; ++k) {
@@ -415,10 +411,6 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
                     originX + runEnd * cell_w_px_,
                     y + cell_h_px_,
                 };
-                // CLIP keeps glyphs from spilling into neighbouring cells;
-                // ENABLE_COLOR_FONT lets COLR/SVG fonts (Segoe UI Emoji,
-                // and Nerd Fonts that ship a coloured Material Design set)
-                // render in colour instead of being flattened to fg.
                 dc->DrawTextW(runText.c_str(),
                               static_cast<UINT32>(runText.size()),
                               fmt, layoutRect, fillBrush.Get(),
@@ -426,11 +418,6 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
                               D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
             }
 
-            // Box-drawing pass for this run. Each glyph is independent
-            // (no run-coalescing) since they're cheap rectangles. Stroke
-            // thickness scales with font size: roughly 7% of cell height
-            // for "light" and 18% for "heavy", clamped to >= 1px so the
-            // rasteriser doesn't drop them at small sizes.
             const float lightPx = std::max(1.0f, std::round(cell_h_px_ * 0.07f));
             const float heavyPx = std::max(2.0f, std::round(cell_h_px_ * 0.18f));
             for (int k = c; k < runEnd; ++k) {
@@ -451,7 +438,11 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
     }
 
     // ---- Pass 3: cursor ------------------------------------------------
-    {
+    //
+    // Only when the user is looking at the live bottom of the buffer.
+    // Otherwise the cursor would float at a meaningless position over the
+    // scrolled-back content.
+    if (atBottom) {
         const int cr = std::clamp(buf.CursorRow(), 0, rows - 1);
         const int cc = std::clamp(buf.CursorCol(), 0, cols - 1);
         const D2D1_RECT_F r2{
@@ -465,16 +456,12 @@ void TerminalView::Draw(ID2D1DeviceContext* dc,
         if (focused) {
             dc->FillRectangle(r2, fillBrush.Get());
 
-            // Re-draw the glyph under the cursor in the bg colour, so it
-            // remains legible inside the inverted block.
-            const auto& cellU = cells[cr * cols + cc];
+            const auto& cellU = cells[static_cast<size_t>(cr) * cols + cc];
             char32_t cp = cellU.ch;
             if (cp != 0 && cp != U' ') {
                 const auto& bgC = pal.terminalBg;
                 fillBrush->SetColor(D2D1::ColorF(bgC.r, bgC.g, bgC.b, 1.0f));
 
-                // Box-drawing under the cursor: redraw via our own rect
-                // primitives so it tiles seamlessly with the next row.
                 if (box::IsBoxDrawing(cp) || box::IsBlockElement(cp)) {
                     const float lightPx = std::max(1.0f, std::round(cell_h_px_ * 0.07f));
                     const float heavyPx = std::max(2.0f, std::round(cell_h_px_ * 0.18f));

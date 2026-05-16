@@ -53,6 +53,13 @@ public:
     // current backbuffer size + DPI. Used by the window when sizing the pty.
     void GridForCurrentSize(int& cols, int& rows) const;
 
+    // Cell metrics in physical pixels at the current DPI. Used by hit
+    // testing in BorderlessWindow to map pointer coords -> grid cells.
+    float CellWidthPx()  const { return terminal_view_.CellWidthPx();  }
+    float CellHeightPx() const { return terminal_view_.CellHeightPx(); }
+    float TerminalPaddingXPx() const { return terminal_view_.PaddingXPx(); }
+    float TerminalPaddingYPx() const { return terminal_view_.PaddingYPx(); }
+
     // Paint one frame.
     void Render(bool windowActive, ui::TrafficLights& trafficLights);
 

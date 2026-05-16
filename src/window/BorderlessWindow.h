@@ -58,10 +58,31 @@ private:
     // session if the grid actually changed.
     void SyncPtyToSize();
 
+    // Map a window-client pixel point (already shifted into squircle-local
+    // coordinates) to a (viewRow, col) cell index. The result is clamped to
+    // [-1..rows] / [-1..cols]; use IsInsideContent() to decide whether the
+    // cursor is actually pointing at a cell.
+    bool ContentPointToCell(int wx, int wy, int& viewRow, int& col) const;
+
+    // Returns true when (wx, wy) is inside the cells region (below the
+    // caption strip and inside the squircle).
+    bool IsInsideContent(int wx, int wy) const;
+
+    // Clipboard helpers. CopySelectionToClipboard returns true if anything
+    // was placed on the clipboard.
+    bool CopySelectionToClipboard();
+    // Reads CF_UNICODETEXT, normalises CRLF to CR, sends to the shell.
+    void PasteFromClipboard();
+
     HWND      hwnd_   {nullptr};
     HINSTANCE hinst_  {nullptr};
     UINT      dpi_    {96};
     bool      active_ {true};
+
+    // Selection drag state. Tracked at the window level because we hold
+    // the mouse capture while the user is dragging; the buffer just holds
+    // the (anchor, head) coordinates.
+    bool      selecting_{false};
 
     // Last (cols, rows) we told the pty. Used to avoid spamming
     // ResizePseudoConsole on every WM_SIZE that doesn't change the grid.
