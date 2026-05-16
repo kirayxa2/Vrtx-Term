@@ -612,6 +612,11 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
         // handles its own click.
         return HTCLIENT;
     }
+    if (settings_.IsOpen() && settings_.HitTestDone(wx, wy)) {
+        // Done pill (settings sheet's caption-strip button) - clickable,
+        // not draggable.
+        return HTCLIENT;
+    }
     if (caption_menu_.IsOpen()) {
         // While the menu is open, *every* click in the squircle goes
         // through WM_LBUTTONDOWN: clicks on the panel pick items, clicks
@@ -621,7 +626,9 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
     }
     if (settings_.IsOpen()) {
         // Settings is full-content modal: every click below the caption
-        // strip is its own. Caption strip stays draggable.
+        // strip is its own. Caption strip stays draggable EXCEPT for
+        // the Done pill (handled above) and the traffic lights (handled
+        // earlier).
         if (wy >= captionHpx) return HTCLIENT;
     }
     if (app_alert_.IsOpen()) {
@@ -922,10 +929,16 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
                 break;
             }
 
-            // Modal Settings sheet: clicks inside the sidebar/content
-            // panes go to the view; clicks on the scrim stay swallowed.
+            // Modal Settings sheet: clicks on sidebar rows or the Done
+            // pill go to the view; clicks on the traffic lights still
+            // work (Apple keeps them live in System Settings too); any
+            // other click is swallowed silently - the sheet has
+            // REPLACED the terminal so there's nothing to click into.
             if (settings_.IsOpen() && !settings_.IsClosing()) {
-                if (settings_.HitTestPanel(wx, wy)) {
+                if (traffic_.HitTest(wx, wy) != ui::TrafficAction::None) {
+                    traffic_.OnLButtonDown(wx, wy);
+                } else if (settings_.HitTestSidebar(wx, wy) ||
+                           settings_.HitTestDone(wx, wy)) {
                     settings_.OnLButtonDown(wx, wy);
                 }
                 ::InvalidateRect(hwnd_, nullptr, FALSE);
@@ -988,13 +1001,32 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             }
 
             if (settings_.IsOpen() && !settings_.IsClosing()) {
-                // Settings sheet in front. The view returns true if the
-                // user clicked the close-X; otherwise the click selects
-                // a row.
-                if (settings_.OnLButtonUp(wx, wy)) {
-                    HideSettings();
+                // Settings sheet in front. Traffic lights stay live (a
+                // close on the window must still work); the view's
+                // OnLButtonUp returns true if the user activated Done.
+                const auto fired = traffic_.OnLButtonUp(wx, wy);
+                switch (fired) {
+                    case ui::TrafficAction::Close:
+                        ::PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+                        ::InvalidateRect(hwnd_, nullptr, FALSE);
+                        break;
+                    case ui::TrafficAction::Minimize:
+                        ::ShowWindow(hwnd_, SW_MINIMIZE);
+                        ::InvalidateRect(hwnd_, nullptr, FALSE);
+                        break;
+                    case ui::TrafficAction::Maximize: {
+                        const bool maxed = ::IsZoomed(hwnd_);
+                        ::ShowWindow(hwnd_, maxed ? SW_RESTORE : SW_MAXIMIZE);
+                        ::InvalidateRect(hwnd_, nullptr, FALSE);
+                        break;
+                    }
+                    case ui::TrafficAction::None:
+                        if (settings_.OnLButtonUp(wx, wy)) {
+                            HideSettings();
+                        }
+                        ::InvalidateRect(hwnd_, nullptr, FALSE);
+                        break;
                 }
-                ::InvalidateRect(hwnd_, nullptr, FALSE);
                 break;
             }
 

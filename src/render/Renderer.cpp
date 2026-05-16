@@ -292,35 +292,33 @@ void Renderer::Render(bool windowActive,
     d2d_dc_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), squircle.Get()),
                        layer.Get());
 
+    // The Settings sheet REPLACES the terminal (and the chrome chevron-
+    // button on the caption strip) - no scrim, no blur. As it animates
+    // in we cross-fade by skipping the terminal & chevron once the
+    // sheet has covered them. The sheet's own ease handles the visible
+    // ramp up.
+    const float settingsProgress = settings.Progress();
+    const bool  drawTerminal     = settingsProgress < 0.999f;
+    const bool  drawChevron      = settingsProgress < 0.999f;
+
     // ---- Terminal grid ---------------------------------------------------
-    //
-    // Content area starts immediately below the caption strip and fills the
-    // remainder of the squircle. TerminalView adds its own padding inside.
-    if (session_) {
+    if (session_ && drawTerminal) {
         const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
         D2D1_RECT_F contentRect{
-            0.0f,
-            captionPx,
-            swW,
-            swH,
+            0.0f, captionPx, swW, swH,
         };
         terminal_view_.Draw(d2d_dc_.Get(), *session_, contentRect, windowActive);
     }
 
-    // Traffic lights produce squircle-local coordinates already; the active
-    // transform places them inside the window correctly.
-    trafficLights.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
-                         windowActive);
+    // ---- Caption chevron-button (hidden while Settings is up) -----------
+    if (drawChevron) {
+        captionButton.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
+                             windowActive);
+    }
 
-    // Caption "more" button on the right side of the strip. Drawn under
-    // the same squircle clip so its pill never leaks outside the rounded
-    // corner if a future layout pushes it close to the edge.
-    captionButton.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
-                         windowActive);
-
-    // App alert sits above the terminal but below the caption-menu (a
-    // dropdown should still be openable while a dialog is up - although
-    // that's a degenerate case, the layering avoids visual conflicts).
+    // ---- App alert ------------------------------------------------------
+    //
+    // Sits above the terminal but below traffic-lights and settings.
     {
         const float captionPx = theme::ToPx(theme::kCaptionHeight, dpi_);
         const D2D1_RECT_F squircleRect{0.0f, 0.0f, swW, swH};
@@ -328,16 +326,19 @@ void Renderer::Render(bool windowActive,
                         dwrite_factory_.Get(), squircleRect, captionPx);
     }
 
-    // Settings sheet sits above the terminal (and above an alert, in
-    // case both happen to be visible during a transition). It draws
-    // BEFORE the caption menu so a chrome dropdown still wins layer
-    // order if the user pops it open.
-    {
-        const D2D1_RECT_F squircleRect{0.0f, 0.0f, swW, swH};
-        settings.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
-                        dwrite_factory_.Get());
-        (void)squircleRect;
-    }
+    // ---- Settings sheet -------------------------------------------------
+    //
+    // Drawn BEFORE traffic-lights so the lights end up optically on top
+    // of the sidebar pill - exactly the macOS System Settings stacking.
+    settings.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
+                    dwrite_factory_.Get());
+
+    // ---- Traffic lights -------------------------------------------------
+    //
+    // Always rendered last so they sit on top of the settings sidebar
+    // pill (Tahoe System Settings stacking).
+    trafficLights.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
+                         windowActive);
 
     // Caption menu draws *after* the button so its panel layers on top
     // of any caption-strip content below the button, but is still inside

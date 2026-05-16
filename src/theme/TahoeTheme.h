@@ -143,57 +143,59 @@ inline constexpr int   kAlertAnimDurationMs = 220;
 
 // ---- Settings sheet (in-window) ------------------------------------------
 //
-// macOS 26 Tahoe System Settings, mirrored as faithfully as we can:
+// macOS 26 Tahoe System Settings, layout (no scrim, no blur — the sheet
+// completely replaces the terminal area while it's up):
 //
-//   * One single rounded translucent shell. The sidebar and content
-//     are not two separate cards (that was the old MVP and looked
-//     wrong on the reference screenshots) - they're cells inside the
-//     same panel, separated by a 1pt hairline.
-//   * Sidebar rows have a coloured "icon tile" on the left: a small
-//     5pt rounded square in a saturated SF Symbols-style color
-//     (gray / red / blue / green / etc.) with a white glyph centred.
-//     This is the most iconic visual cue of System Settings.
-//   * The active row's whole pill is filled with system blue + white
-//     text + a SLIGHTLY brightened tile so the icon still reads.
-//   * The content area starts with a large title (28pt semi-bold)
-//     then group cards (18pt rounded) - we don't ship real controls
-//     yet, but the chrome is set up to host them.
-//   * A primary "Done" button (system blue pill, white text) sits in
-//     the top-right of the content area. There's no X button in the
-//     sidebar; that's the Sequoia/Sonoma look. Tahoe uses Done.
+//   +--squircle (caption strip stays at top)---------------------------+
+//   | TL  TL  TL                                              [Done]   |  <- caption
+//   |                                                                  |
+//   |  +--sidebar pill (r=window=16)-+                                  |
+//   |  |  General                    |     Title                       |
+//   |  |  Appearance                 |                                  |
+//   |  |  Prompt                     |     <controls land here, on     |
+//   |  |  Terminal                   |      the bare squircle - no     |
+//   |  |  About                      |      card / wrapper>            |
+//   |  +-----------------------------+                                  |
+//   +------------------------------------------------------------------+
+//
+//   * Sidebar is a separate floating rounded pill. Its corner radius
+//     equals the window's (16pt) - the user explicitly asked for the
+//     same accuracy.
+//   * Content is the bare squircle to the right with a small gutter
+//     between it and the sidebar. No card / wrapper is drawn under
+//     the controls; future toggles / pickers / sliders will sit
+//     directly on the window surface, like Apple's panes.
+//   * Done is a system-blue pill in the top-right of the caption
+//     strip, replacing the chevron-button while the sheet is up.
 
-inline constexpr float kSettingsSidebarWidth        = 210.0f;
-inline constexpr float kSettingsOuterPadding        = 14.0f;  // gutter inside squircle
-inline constexpr float kSettingsShellCornerRadius   = 14.0f;  // outer shell
-inline constexpr float kSettingsRowHeight           = 32.0f;
-inline constexpr float kSettingsRowGap              =  2.0f;
-inline constexpr float kSettingsRowPaddingX         =  8.0f;  // pill side padding
-inline constexpr float kSettingsRowRadius           =  7.0f;
-inline constexpr float kSettingsRowSidePadding      = 10.0f;  // sidebar -> pill edges
-inline constexpr float kSettingsTileSize            = 22.0f;  // icon tile
-inline constexpr float kSettingsTileRadius          =  5.0f;
-inline constexpr float kSettingsTileGlyphSize       = 13.0f;
-inline constexpr float kSettingsTileTextGap         = 10.0f;  // tile -> label
-inline constexpr float kSettingsRowTextSize         = 13.0f;
-inline constexpr float kSettingsSidebarTopGap       = 14.0f;  // top of sidebar -> first row
-inline constexpr float kSettingsSidebarBottomGap    = 14.0f;
-inline constexpr float kSettingsGroupGap            = 10.0f;  // between sidebar groups
-inline constexpr float kSettingsContentPaddingX     = 28.0f;
-inline constexpr float kSettingsContentPaddingY     = 20.0f;
-inline constexpr float kSettingsTitleSize           = 26.0f;  // pane title
-inline constexpr float kSettingsTitleBottomGap      = 14.0f;
-inline constexpr float kSettingsBodyTextSize        = 13.0f;
-inline constexpr float kSettingsCardRadius          = 11.0f;
-inline constexpr float kSettingsCardPaddingX        = 14.0f;
-inline constexpr float kSettingsCardPaddingY        = 12.0f;
-inline constexpr float kSettingsDoneWidth           = 86.0f;  // primary Done pill
-inline constexpr float kSettingsDoneHeight          = 26.0f;
-inline constexpr float kSettingsDoneRadius          =  6.0f;
-inline constexpr float kSettingsDoneTextSize        = 13.0f;
-inline constexpr float kSettingsDoneInsetX          = 18.0f;  // from shell right
-inline constexpr float kSettingsDoneInsetY          = 16.0f;  // from shell top
-inline constexpr float kSettingsSeparatorWidth      =  1.0f;  // sidebar | content
-inline constexpr int   kSettingsAnimDurationMs      = 260;
+inline constexpr float kSettingsSidebarWidth      = 210.0f;
+inline constexpr float kSettingsOuterPaddingX     = 16.0f;   // squircle <-> sidebar / content
+inline constexpr float kSettingsOuterPaddingTop   = 10.0f;   // caption-strip bottom -> sidebar top
+inline constexpr float kSettingsOuterPaddingBot   = 16.0f;
+inline constexpr float kSettingsSidebarGap        = 14.0f;   // sidebar <-> content
+inline constexpr float kSettingsSidebarRadius     = kWindowCornerRadius; // 16pt - matches window
+inline constexpr float kSettingsRowHeight         = 32.0f;
+inline constexpr float kSettingsRowGap            =  2.0f;
+inline constexpr float kSettingsRowPaddingX       =  8.0f;   // pill side padding
+inline constexpr float kSettingsRowRadius         =  7.0f;
+inline constexpr float kSettingsRowSidePadding    = 10.0f;   // sidebar -> pill edges
+inline constexpr float kSettingsTileSize          = 22.0f;   // icon tile
+inline constexpr float kSettingsTileRadius        =  5.0f;
+inline constexpr float kSettingsTileGlyphSize     = 13.0f;
+inline constexpr float kSettingsTileTextGap       = 10.0f;
+inline constexpr float kSettingsRowTextSize       = 13.0f;
+inline constexpr float kSettingsSidebarTopGap     = 12.0f;   // sidebar top -> first row
+inline constexpr float kSettingsSidebarBottomGap  = 12.0f;
+inline constexpr float kSettingsContentPaddingX   = 12.0f;   // gutter inside content area
+inline constexpr float kSettingsContentPaddingTop = 14.0f;   // caption -> title
+inline constexpr float kSettingsTitleSize         = 28.0f;   // pane title
+inline constexpr float kSettingsTitleBottomGap    = 16.0f;
+inline constexpr float kSettingsBodyTextSize      = 13.0f;
+inline constexpr float kSettingsDoneWidth         = 88.0f;   // primary Done pill
+inline constexpr float kSettingsDoneHeight        = 22.0f;   // matches caption-button vertical centre
+inline constexpr float kSettingsDoneTextSize      = 13.0f;
+inline constexpr float kSettingsDoneInsetX        =  8.0f;   // squircle right -> Done right
+inline constexpr int   kSettingsAnimDurationMs    = 260;
 
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
@@ -285,14 +287,12 @@ struct Palette {
 
     // In-window Settings sheet (Tahoe System Settings clone).
     //
-    // The shell is one big translucent rounded panel; sidebar and
-    // content live inside it with a hairline separator between. Tile
-    // colours are the canonical SF Symbols-tinted backgrounds Apple
-    // uses for category icons in System Settings.
-    Color settingsScrim;        // dim layer over terminal while open
-    Color settingsShellFill;    // outer rounded panel (single shell)
-    Color settingsSidebarFill;  // tinted band behind sidebar rows
-    Color settingsSeparator;    // 1pt hairline between sidebar / content
+    // The sheet replaces the terminal: there's no scrim or blur. The
+    // sidebar is a separate floating rounded pill (radius == window
+    // radius); the content area is the bare squircle with a small
+    // gutter. Tile colours are the canonical SF Symbols-tinted
+    // backgrounds Apple uses for category icons.
+    Color settingsSidebarFill;  // floating sidebar pill fill
     Color settingsRowHover;     // hovered sidebar row overlay
     Color settingsRowActive;    // selected sidebar row fill (system accent)
     Color settingsRowText;      // sidebar row label
@@ -300,9 +300,8 @@ struct Palette {
     Color settingsTitle;        // big pane title ("Appearance")
     Color settingsBody;         // pane body text
     Color settingsBodyMuted;    // secondary body text (descriptions)
-    Color settingsCardFill;     // group card inside content pane
     Color settingsTileGlyph;    // glyph drawn on top of the icon tile
-    Color settingsDoneFill;     // primary Done button
+    Color settingsDoneFill;     // primary Done button (caption strip)
     Color settingsDoneHover;    // Done hover overlay (additive)
     Color settingsDoneText;     // Done glyph colour
 
@@ -361,10 +360,7 @@ inline constexpr Palette kDarkPalette{
     .alertButtonHover = Color::FromARGB(0x22FFFFFF),
     .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
 
-    .settingsScrim         = Color::FromARGB(0x99000000),
-    .settingsShellFill     = Color::FromARGB(0xF21F1F23),
-    .settingsSidebarFill   = Color::FromARGB(0x14FFFFFF),
-    .settingsSeparator     = Color::FromARGB(0x22FFFFFF),
+    .settingsSidebarFill   = Color::FromARGB(0xFF26262A),
     .settingsRowHover      = Color::FromARGB(0x1AFFFFFF),
     .settingsRowActive     = Color::FromARGB(0xFF0A84FF),
     .settingsRowText       = Color::FromARGB(0xFFEDEDEF),
@@ -372,7 +368,6 @@ inline constexpr Palette kDarkPalette{
     .settingsTitle         = Color::FromARGB(0xFFEDEDEF),
     .settingsBody          = Color::FromARGB(0xFFEDEDEF),
     .settingsBodyMuted     = Color::FromARGB(0x99EDEDEF),
-    .settingsCardFill      = Color::FromARGB(0x14FFFFFF),
     .settingsTileGlyph     = Color::FromARGB(0xFFFFFFFF),
     .settingsDoneFill      = Color::FromARGB(0xFF0A84FF),
     .settingsDoneHover     = Color::FromARGB(0x22FFFFFF),
@@ -436,10 +431,7 @@ inline constexpr Palette kLightPalette{
     .alertButtonHover = Color::FromARGB(0x14000000),
     .alertButtonText  = Color::FromARGB(0xFFFFFFFF),
 
-    .settingsScrim         = Color::FromARGB(0x66000000),
-    .settingsShellFill     = Color::FromARGB(0xF2F4F4F6),
-    .settingsSidebarFill   = Color::FromARGB(0x10000000),
-    .settingsSeparator     = Color::FromARGB(0x14000000),
+    .settingsSidebarFill   = Color::FromARGB(0xFFEDEDEF),
     .settingsRowHover      = Color::FromARGB(0x10000000),
     .settingsRowActive     = Color::FromARGB(0xFF007AFF),
     .settingsRowText       = Color::FromARGB(0xFF1A1A1C),
@@ -447,7 +439,6 @@ inline constexpr Palette kLightPalette{
     .settingsTitle         = Color::FromARGB(0xFF1A1A1C),
     .settingsBody          = Color::FromARGB(0xFF1A1A1C),
     .settingsBodyMuted     = Color::FromARGB(0x991A1A1C),
-    .settingsCardFill      = Color::FromARGB(0xFFFFFFFF),
     .settingsTileGlyph     = Color::FromARGB(0xFFFFFFFF),
     .settingsDoneFill      = Color::FromARGB(0xFF007AFF),
     .settingsDoneHover     = Color::FromARGB(0x14000000),
