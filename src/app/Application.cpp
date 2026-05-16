@@ -48,6 +48,57 @@ int Application::Run(HINSTANCE hInstance) {
     window_.SetSession(&session_);
     Trace("session bound to window");
 
+    // Populate the caption-menu with default items. Labels are localised
+    // by the user's UI language: Russian if the primary language is RU,
+    // English otherwise. The handlers run synchronously on the UI thread
+    // when the user picks an item, so they're free to touch HWNDs.
+    {
+        const LANGID langId = ::GetUserDefaultUILanguage();
+        const bool   ru     = (PRIMARYLANGID(langId) == LANG_RUSSIAN);
+
+        auto& menu = window_.GetCaptionMenu();
+
+        // Settings: not yet implemented; show a quick tooltip-equivalent
+        // via MessageBox so the user can confirm the wiring works.
+        menu.AddItem({
+            L"\u2699",   // U+2699 GEAR
+            ru ? L"Настройки" : L"Settings",
+            [hwnd = window_.Hwnd(), ru]() {
+                ::MessageBoxW(hwnd,
+                    ru ? L"Окно настроек ещё не готово."
+                       : L"Settings UI is not implemented yet.",
+                    ru ? L"Настройки" : L"Settings",
+                    MB_OK | MB_ICONINFORMATION);
+            }
+        });
+
+        // Reset terminal: clears the screen via VT escape (CSI 2J + CUP
+        // 1;1 + reset SGR) and the scrollback (CSI 3J). Doesn't kill the
+        // shell - the prompt re-appears after the next pty heartbeat.
+        menu.AddItem({
+            L"\u21BA",   // U+21BA ANTICLOCKWISE OPEN CIRCLE ARROW
+            ru ? L"Сбросить терминал" : L"Reset terminal",
+            [this]() {
+                const char kReset[] = "\x1b[H\x1b[2J\x1b[3J\x1b[0m";
+                session_.SendInput(kReset, sizeof(kReset) - 1);
+            }
+        });
+
+        // About: short blurb about the project.
+        menu.AddItem({
+            L"\u2139",   // U+2139 INFORMATION SOURCE
+            ru ? L"О программе" : L"About",
+            [hwnd = window_.Hwnd(), ru]() {
+                ::MessageBoxW(hwnd,
+                    ru ? L"MacTermWin\nТерминал в стиле macOS Tahoe для Windows."
+                       : L"MacTermWin\nA macOS Tahoe-styled terminal for Windows.",
+                    ru ? L"О программе" : L"About",
+                    MB_OK | MB_ICONINFORMATION);
+            }
+        });
+    }
+    Trace("caption-menu items configured");
+
     MSG msg{};
     while (::GetMessageW(&msg, nullptr, 0, 0) > 0) {
         ::TranslateMessage(&msg);

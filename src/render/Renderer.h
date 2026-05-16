@@ -32,6 +32,7 @@
 #include "render/TerminalView.h"
 #include "terminal/TerminalSession.h"
 #include "ui/CaptionButton.h"
+#include "ui/CaptionMenu.h"
 #include "ui/TrafficLights.h"
 
 namespace mactw::render {
@@ -64,7 +65,8 @@ public:
     // Paint one frame.
     void Render(bool windowActive,
                 ui::TrafficLights& trafficLights,
-                ui::CaptionButton& captionButton);
+                ui::CaptionButton& captionButton,
+                ui::CaptionMenu&   captionMenu);
 
     UINT          Dpi()        const { return dpi_; }
     UINT          WidthPx()    const { return width_px_; }

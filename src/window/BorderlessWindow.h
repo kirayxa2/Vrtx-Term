@@ -28,6 +28,7 @@
 #include "render/Renderer.h"
 #include "terminal/TerminalSession.h"
 #include "ui/CaptionButton.h"
+#include "ui/CaptionMenu.h"
 #include "ui/TrafficLights.h"
 
 namespace mactw::window {
@@ -51,6 +52,7 @@ public:
     // Access the caption "more" button to attach the user-supplied click
     // handler from outside (e.g. Application::Run).
     ui::CaptionButton& GetCaptionButton() { return caption_button_; }
+    ui::CaptionMenu&   GetCaptionMenu()   { return caption_menu_; }
 
 private:
     static LRESULT CALLBACK StaticWndProc(HWND, UINT, WPARAM, LPARAM);
@@ -97,7 +99,26 @@ private:
     render::Renderer            renderer_;
     ui::TrafficLights           traffic_;
     ui::CaptionButton           caption_button_;
+    ui::CaptionMenu             caption_menu_;
     terminal::TerminalSession*  session_{nullptr};
+
+    // ---- Caption menu animation ---------------------------------------
+    //
+    // The menu's open/close transition is driven by a Win32 timer set up
+    // when the user toggles the button. `menu_anim_target_` is what the
+    // animation is heading toward (0 = closed, 1 = open). `menu_anim_t_`
+    // is the current normalised position. When `menu_anim_t_` reaches the
+    // target the timer is killed.
+    UINT_PTR menu_timer_id_   {0};      // 0 means no timer running
+    DWORD    menu_anim_start_ {0};      // GetTickCount() at last toggle
+    float    menu_anim_from_  {0.0f};   // value at the moment of toggle
+    float    menu_anim_target_{0.0f};   // 0 or 1
+    float    menu_anim_t_     {0.0f};   // current eased position [0..1]
+
+    void ToggleMenu();
+    void StartMenuAnimation(float target);
+    void OnMenuTimer();
+    void RelayoutCaptionMenu();
 };
 
 }  // namespace mactw::window

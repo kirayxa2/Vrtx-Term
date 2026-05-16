@@ -21,7 +21,6 @@ void CaptionButton::UpdateLayout(int squircleWidthPx, UINT dpi) {
     // Right-anchored at the squircle's right edge inset by `insetX`,
     // vertically centred on the caption strip with a small downward
     // offset to optically balance the squircle's curving top edge.
-    // The button is a perfect circle, so width == height == diameter.
     const float right = static_cast<float>(squircleWidthPx) - insetX;
     const float left  = right - d;
     const float cy    = captionH * 0.5f + offsetY;
@@ -32,9 +31,6 @@ void CaptionButton::UpdateLayout(int squircleWidthPx, UINT dpi) {
 }
 
 bool CaptionButton::HitTest(int x, int y) const {
-    // Hit-test against the actual circular shape, not the bounding rect,
-    // so clicks just outside the disc (in the caption strip corners) fall
-    // through to dragging instead of being eaten by the button.
     const float cx = (bounds_.left + bounds_.right)  * 0.5f;
     const float cy = (bounds_.top  + bounds_.bottom) * 0.5f;
     const float r  = (bounds_.right - bounds_.left)  * 0.5f;
@@ -81,21 +77,23 @@ void CaptionButton::Render(ID2D1DeviceContext* dc,
     const D2D1_ELLIPSE disc = D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r);
 
     // ---- Base fill: always visible -------------------------------------
-    //
-    // Apple keeps a faint dark wash under the glyph at all times so the
-    // button's shape reads even when the cursor is nowhere near it. Hover
-    // and press add an extra translucent overlay on top of this base.
     if (windowActive) {
         brush->SetColor(ToD2D(pal.captionButtonFill));
     } else {
-        // Dim the fill on inactive windows so the chrome reads as muted.
         const auto c = pal.captionButtonFill;
         brush->SetColor(D2D1::ColorF(c.r, c.g, c.b, c.a * 0.5f));
     }
     dc->FillEllipse(disc, brush);
 
+    // While the menu is open the disc keeps a press-strength fill so it
+    // visually anchors the popup. Mix expansion into the overlay so the
+    // transition is continuous (no pop) when opening / closing.
     if (windowActive) {
-        if (pressed_) {
+        if (expansion_ > 0.0f) {
+            const auto c = pal.captionButtonPressed;
+            brush->SetColor(D2D1::ColorF(c.r, c.g, c.b, c.a * expansion_));
+            dc->FillEllipse(disc, brush);
+        } else if (pressed_) {
             brush->SetColor(ToD2D(pal.captionButtonPressed));
             dc->FillEllipse(disc, brush);
         } else if (hovered_) {
@@ -105,15 +103,6 @@ void CaptionButton::Render(ID2D1DeviceContext* dc,
     }
 
     // ---- Hairline outline ----------------------------------------------
-    //
-    // Same colour and stroke width as the window border, so the button
-    // visually belongs to the chrome rather than feeling pasted on. We
-    // inset the geometry by half a stroke so the entire stroke is visible
-    // (D2D centres strokes on the path).
-    //
-    // Stroke thickness scales with the disc's actual radius rather than a
-    // hard-coded DPI conversion, which keeps the hairline crisp on any
-    // monitor without us having to thread `dpi_` into Render().
     const float dpiFactor   = r / std::max(1.0f, theme::kCaptionButtonDiameter * 0.5f);
     const float strokeAtDpi = std::max(1.0f,
                                        theme::kWindowBorderWidth * dpiFactor);
@@ -125,25 +114,15 @@ void CaptionButton::Render(ID2D1DeviceContext* dc,
     brush->SetColor(ToD2D(pal.windowBorder));
     dc->DrawEllipse(outline, brush, strokeAtDpi);
 
-    // ---- Chevron-down glyph --------------------------------------------
+    // ---- Chevron-down glyph (rotates 180deg as expansion -> 1) ---------
     //
-    // Apple's SF Symbol "chevron.down" (Regular weight, scale Medium) is
-    // a thin V centred horizontally and vertically on the disc.
-    //
-    // Reverse-engineered proportions from a high-res macOS Tahoe Mail
-    // toolbar capture, normalised to a 28pt button:
-    //   chevron width  = ~36% of the disc diameter
-    //   chevron height = ~20% of the disc diameter
-    //   stroke         = ~7%  of the disc diameter
-    //
-    // The 1.8:1 width-to-height ratio + thin stroke produce the flat,
-    // wide, light V that reads as Apple's chevron rather than a generic
-    // chunky "v". Geometric centring (midpoint of the bounding box on the
-    // disc centre) is correct here - SF Symbols already bakes the visual
-    // balance into its glyph metrics.
+    // Apple's SF Symbol "chevron.down" inside a 28pt button uses a flat,
+    // wide V (1.8:1). We draw it as a single polyline so the apex uses
+    // the path's lineJoin (round) instead of two overlapping round caps,
+    // and rotate it about the disc centre by 180deg * expansion.
     const float diameter = r * 2.0f;
-    const float halfW    = diameter * 0.18f;   // half of chevron width
-    const float halfH    = diameter * 0.10f;   // half of chevron height
+    const float halfW    = diameter * 0.18f;
+    const float halfH    = diameter * 0.10f;
 
     const D2D1_POINT_2F p_left  {cx - halfW, cy - halfH};
     const D2D1_POINT_2F p_tip   {cx,         cy + halfH};
@@ -155,11 +134,6 @@ void CaptionButton::Render(ID2D1DeviceContext* dc,
 
     const float chevStroke = std::max(1.5f, diameter * 0.07f);
 
-    // SF Symbols chevrons use round caps + round join. Drawing as a
-    // single polyline (not two separate lines) is critical: round-join
-    // at the apex gives a smooth point, whereas two independent
-    // `DrawLine` calls would render two overlapping round caps and bake
-    // them into a chunky bulge.
     ComPtr<ID2D1StrokeStyle> ss;
     D2D1_STROKE_STYLE_PROPERTIES props{};
     props.startCap   = D2D1_CAP_STYLE_ROUND;
@@ -177,7 +151,20 @@ void CaptionButton::Render(ID2D1DeviceContext* dc,
         sink->AddLine(p_right);
         sink->EndFigure(D2D1_FIGURE_END_OPEN);
         sink->Close();
+
+        // Save/restore transform so we don't disturb the caller. The
+        // rotation is centred on the disc, not on the chevron's bbox -
+        // this keeps the glyph centered through the whole flip.
+        D2D1_MATRIX_3X2_F prev;
+        dc->GetTransform(&prev);
+        const float angleDeg = 180.0f * std::clamp(expansion_, 0.0f, 1.0f);
+        const D2D1_MATRIX_3X2_F rot = D2D1::Matrix3x2F::Rotation(
+            angleDeg, D2D1::Point2F(cx, cy));
+        dc->SetTransform(rot * prev);
+
         dc->DrawGeometry(path.Get(), brush, chevStroke, ss.Get());
+
+        dc->SetTransform(prev);
     }
 }
 

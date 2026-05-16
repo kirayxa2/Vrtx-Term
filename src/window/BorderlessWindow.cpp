@@ -18,6 +18,10 @@ constexpr UINT WM_APP_PTY_DIRTY = WM_APP + 1;
 // default and matches Windows Terminal.
 constexpr int kWheelLinesPerDetent = 3;
 
+// Caption-menu animation: ~16ms tick (≈60Hz) and a unique timer id.
+constexpr UINT_PTR kMenuTimerId      = 0x4D54u;   // 'MT'
+constexpr UINT     kMenuTimerPeriod  = 16;
+
 // Get per-monitor DPI; falls back to 96 only on pre-1607 systems.
 UINT GetWindowDpiSafe(HWND hwnd) {
     using PFN = UINT(WINAPI*)(HWND);
@@ -135,6 +139,13 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     }
     Trace("caption-button layout done");
 
+    RelayoutCaptionMenu();
+    Trace("caption-menu layout done");
+
+    // Toggle the menu when the caption button is clicked. The on_click
+    // handler runs synchronously inside CaptionButton::OnLButtonUp.
+    caption_button_.SetOnClick([this]() { ToggleMenu(); });
+
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
     Trace("window shown");
@@ -187,6 +198,70 @@ void BorderlessWindow::OnDpiChanged(UINT newDpi, const RECT* suggested) {
         const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
         const int sqW = std::max(1, static_cast<int>(rc.right - rc.left) - 2 * marginPx);
         caption_button_.UpdateLayout(sqW, dpi_);
+    }
+    RelayoutCaptionMenu();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+// ---------------------------------------------------------------------------
+
+void BorderlessWindow::RelayoutCaptionMenu() {
+    if (!hwnd_) return;
+    RECT rc{};
+    ::GetClientRect(hwnd_, &rc);
+    const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+    const int sqW = std::max(1, static_cast<int>(rc.right - rc.left) - 2 * marginPx);
+    caption_menu_.UpdateLayout(caption_button_.Bounds(), sqW, dpi_);
+}
+
+void BorderlessWindow::ToggleMenu() {
+    StartMenuAnimation(caption_menu_.IsOpen() ? 0.0f : 1.0f);
+    if (caption_menu_.IsOpen()) {
+        // Closing: keep IsOpen=true through the fade-out; the timer
+        // flips it to false at the end. This matches how Apple keeps
+        // the panel hit-testable until it's fully gone.
+    } else {
+        // Opening: relayout *now* so the panel is anchored to the
+        // current button bounds (resizes between toggles are rare but
+        // possible).
+        RelayoutCaptionMenu();
+        caption_menu_.SetOpen(true);
+    }
+}
+
+void BorderlessWindow::StartMenuAnimation(float target) {
+    menu_anim_from_   = menu_anim_t_;
+    menu_anim_target_ = target;
+    menu_anim_start_  = ::GetTickCount();
+    if (menu_timer_id_ == 0) {
+        menu_timer_id_ = ::SetTimer(hwnd_, kMenuTimerId,
+                                    kMenuTimerPeriod, nullptr);
+    }
+}
+
+void BorderlessWindow::OnMenuTimer() {
+    const DWORD now = ::GetTickCount();
+    const DWORD dt  = now - menu_anim_start_;
+    const float total = static_cast<float>(theme::kCaptionMenuAnimDurationMs);
+    const float u = std::clamp(static_cast<float>(dt) / total, 0.0f, 1.0f);
+    // Cubic ease-out is applied inside the menu's Render(), so feed the
+    // raw progress here and let the menu interpret it.
+    const float dir = (menu_anim_target_ >= menu_anim_from_) ? 1.0f : -1.0f;
+    if (dir > 0.0f) {
+        menu_anim_t_ = menu_anim_from_ + (menu_anim_target_ - menu_anim_from_) * u;
+    } else {
+        menu_anim_t_ = menu_anim_from_ + (menu_anim_target_ - menu_anim_from_) * u;
+    }
+    caption_menu_.SetProgress(menu_anim_t_);
+    caption_button_.SetExpansion(menu_anim_t_);
+
+    if (u >= 1.0f) {
+        ::KillTimer(hwnd_, menu_timer_id_);
+        menu_timer_id_ = 0;
+        // If we were closing, mark the menu closed only after the fade-out.
+        if (menu_anim_target_ <= 0.0f) {
+            caption_menu_.SetOpen(false);
+        }
     }
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
@@ -392,6 +467,13 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
         // handles its own click.
         return HTCLIENT;
     }
+    if (caption_menu_.IsOpen()) {
+        // While the menu is open, *every* click in the squircle goes
+        // through WM_LBUTTONDOWN: clicks on the panel pick items, clicks
+        // anywhere else dismiss the menu. We don't want any of those to
+        // trigger a window drag or resize.
+        return HTCLIENT;
+    }
     if (wy < captionHpx) {
         return HTCAPTION;
     }
@@ -463,6 +545,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
             const int sqW = std::max(1, static_cast<int>(LOWORD(lp)) - 2 * marginPx);
             caption_button_.UpdateLayout(sqW, dpi_);
+            RelayoutCaptionMenu();
             SyncPtyToSize();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
@@ -482,6 +565,15 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
 
             const bool ctrl  = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
             const bool shift = (::GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+
+            // Esc dismisses the caption menu without sending Esc to the
+            // shell; only when the menu is actually showing, otherwise
+            // the shell is still in charge of Esc.
+            if (wp == VK_ESCAPE && caption_menu_.IsOpen()) {
+                StartMenuAnimation(0.0f);
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+                return 0;
+            }
 
             // Shortcut: Ctrl+Shift+C = copy. We only intercept it if there
             // is something selected; otherwise let the shell receive its
@@ -565,6 +657,13 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             return 0;
 
+        case WM_TIMER:
+            if (wp == kMenuTimerId) {
+                OnMenuTimer();
+                return 0;
+            }
+            break;
+
         case WM_SETFOCUS:
         case WM_KILLFOCUS:
             ::InvalidateRect(hwnd_, nullptr, FALSE);
@@ -577,6 +676,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const int wy = GET_Y_LPARAM(lp) - marginPx;
             traffic_.OnMouseMove(wx, wy);
             caption_button_.OnMouseMove(wx, wy);
+            caption_menu_.OnMouseMove(wx, wy);
 
             TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
             ::TrackMouseEvent(&tme);
@@ -597,6 +697,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_MOUSELEAVE:
             traffic_.OnMouseLeave();
             caption_button_.OnMouseLeave();
+            caption_menu_.OnMouseLeave();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
 
@@ -605,6 +706,28 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const int wx = GET_X_LPARAM(lp) - marginPx;
             const int wy = GET_Y_LPARAM(lp) - marginPx;
             ::SetCapture(hwnd_);
+
+            // Caption menu is modal-ish: if it's showing, all click-down
+            // routes through it first. A click on the menu rows arms the
+            // pressed-state; a click outside both the menu and the button
+            // dismisses the menu without triggering anything else (Apple
+            // does the same on light-dismiss).
+            if (caption_menu_.IsOpen()) {
+                if (caption_menu_.HitTest(wx, wy)) {
+                    caption_menu_.OnLButtonDown(wx, wy);
+                    ::InvalidateRect(hwnd_, nullptr, FALSE);
+                    break;
+                }
+                if (!caption_button_.HitTest(wx, wy)) {
+                    // Click landed outside both the menu and its anchor
+                    // button -> animate the menu shut. Don't fall through
+                    // to terminal selection; the click "spent" itself on
+                    // the dismiss gesture.
+                    StartMenuAnimation(0.0f);
+                    ::InvalidateRect(hwnd_, nullptr, FALSE);
+                    break;
+                }
+            }
 
             if (traffic_.HitTest(wx, wy) != ui::TrafficAction::None) {
                 traffic_.OnLButtonDown(wx, wy);
@@ -631,14 +754,21 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             const int wx = GET_X_LPARAM(lp) - marginPx;
             const int wy = GET_Y_LPARAM(lp) - marginPx;
 
+            if (caption_menu_.IsOpen() && caption_menu_.HitTest(wx, wy)) {
+                // Pick fired -> the item handler runs synchronously and
+                // typically wants the menu to disappear afterward.
+                if (caption_menu_.OnLButtonUp(wx, wy)) {
+                    StartMenuAnimation(0.0f);
+                }
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+                break;
+            }
+
             if (selecting_ && session_) {
                 selecting_ = false;
-                // If anchor == head, treat it as a click and clear so we
-                // don't leave a phantom selection state.
                 auto& buf = session_->Buffer();
                 std::lock_guard<std::mutex> lk(buf.Lock());
                 if (buf.HasSelection()) {
-                    // Empty selection (no drag) -> clear it.
                     if (buf.SelectionText().empty()) {
                         buf.ClearSelection();
                     }
@@ -646,8 +776,6 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
             } else if (caption_button_.HitTest(wx, wy)) {
                 caption_button_.OnLButtonUp(wx, wy);
             } else {
-                // Caption button might have been pressed and released
-                // outside; tell it so it can reset its pressed state.
                 caption_button_.OnLButtonUp(wx, wy);
 
                 const auto fired = traffic_.OnLButtonUp(wx, wy);
@@ -711,7 +839,7 @@ LRESULT BorderlessWindow::WndProc(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_PAINT:
-            renderer_.Render(active_, traffic_, caption_button_);
+            renderer_.Render(active_, traffic_, caption_button_, caption_menu_);
             ::ValidateRect(hwnd_, nullptr);
             return 0;
 

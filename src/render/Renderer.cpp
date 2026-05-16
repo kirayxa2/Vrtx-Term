@@ -192,7 +192,8 @@ void Renderer::Resize(UINT widthPx, UINT heightPx) {
 
 void Renderer::Render(bool windowActive,
                       ui::TrafficLights& trafficLights,
-                      ui::CaptionButton& captionButton) {
+                      ui::CaptionButton& captionButton,
+                      ui::CaptionMenu&   captionMenu) {
     if (!d2d_dc_ || !swap_chain_) return;
 
     const auto& pal      = theme::ActivePalette();
@@ -314,6 +315,12 @@ void Renderer::Render(bool windowActive,
     // corner if a future layout pushes it close to the edge.
     captionButton.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
                          windowActive);
+
+    // Caption menu draws *after* the button so its panel layers on top
+    // of any caption-strip content below the button, but is still inside
+    // the squircle clip - so a long menu can never escape the window.
+    captionMenu.Render(d2d_dc_.Get(), brush_.Get(), d2d_factory_.Get(),
+                       dwrite_factory_.Get());
 
     d2d_dc_->PopLayer();
 

@@ -1,21 +1,15 @@
 // Apple Tahoe-style "more" / "dropdown" button in the top-right of the
 // caption strip.
 //
-// Visually this is a pill-shaped slot, ~32x22 pt, that holds a small
-// chevron-down glyph. Default state has no fill - only the glyph is
-// visible against the window tint. On hover the pill gets a subtle
-// translucent background; on press the background becomes a touch more
-// solid. Matches the look of the sidebar/split-view buttons that ship in
-// macOS 26 Tahoe windows and the inspector toggles in Mail/Notes.
+// Visually this is a circular Liquid Glass disc, ~28pt across, that holds
+// an SF-Symbols-style chevron-down glyph. The fill is always visible
+// (faint dark wash + 1pt hairline outline matching the window border);
+// hover and press add a translucent overlay on top.
 //
-// Behaviour:
-//   - Hover state tracked at the *button* level, not group-wise (we have
-//     only one button right now).
-//   - Press-then-release inside the button fires `on_click_`. Press
-//     followed by drag-out cancels the click.
-//   - When the window is inactive the button keeps its layout but skips
-//     the hover/press visuals so the chrome looks dim, like the rest of
-//     the inactive window.
+// When the caption-menu is open the chevron flips 180deg (points up) and
+// the button stays in its "expanded" visual state. The flip is animated
+// outside this class, by feeding `expansion_` (0..1) from the window's
+// animation clock into SetExpansion().
 //
 // Coordinates throughout are *physical pixels relative to the squircle
 // origin* (not the HWND), matching the convention TrafficLights uses.
@@ -35,7 +29,7 @@ public:
     // and DPI. Call from the window after every resize / DPI change.
     void UpdateLayout(int squircleWidthPx, UINT dpi);
 
-    // True when (x, y) is inside the button's pill bounds.
+    // True when (x, y) is inside the button's disc bounds.
     bool HitTest(int x, int y) const;
 
     void OnMouseMove(int x, int y);
@@ -55,11 +49,27 @@ public:
     // UI thread synchronously from inside OnLButtonUp().
     void SetOnClick(ClickHandler h) { on_click_ = std::move(h); }
 
+    // Animation hook. `expansion` is a unit-interval interpolation
+    // factor where 0 = fully closed (chevron points down) and 1 = fully
+    // open (chevron points up). The window's animation tick drives this
+    // value over `kCaptionMenuAnimDurationMs` while the menu is opening
+    // or closing, so the rotation tracks the menu's appearance smoothly.
+    void SetExpansion(float expansion) { expansion_ = expansion; }
+
+    // Geometry accessor used by the popup menu so it can anchor its top
+    // edge to the bottom of the button (in squircle-local pixels).
+    D2D1_RECT_F Bounds() const { return bounds_; }
+
 private:
-    D2D1_RECT_F bounds_{};   // pill rect in squircle-local px
+    D2D1_RECT_F bounds_{};   // disc rect in squircle-local px
 
     bool hovered_{false};
     bool pressed_{false};
+
+    // Animated rotation factor, driven externally by the window's tick.
+    // Capacity beyond [0, 1] is harmless (the rotation just overshoots),
+    // but the window currently clamps the timeline so values stay inside.
+    float expansion_{0.0f};
 
     ClickHandler on_click_;
 };

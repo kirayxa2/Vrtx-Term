@@ -92,6 +92,29 @@ inline constexpr float kCaptionButtonDiameter = 28.0f;
 inline constexpr float kCaptionButtonInsetX   = 3.0f;
 inline constexpr float kCaptionButtonOffsetY  = 1.0f;
 
+// Caption "more" menu - the popup that grows out of the button.
+//
+// Width is fixed at 220pt so labels don't reflow as we add/remove items.
+// Height is derived from the items list at layout time. The corner
+// radius is large enough to feel "Tahoe" but smaller than the window's
+// 16pt so the panel reads as a child element rather than a sibling.
+inline constexpr float kCaptionMenuWidth         = 220.0f;
+inline constexpr float kCaptionMenuRowHeight     = 32.0f;
+inline constexpr float kCaptionMenuPaddingX      = 10.0f;
+inline constexpr float kCaptionMenuPaddingY      = 6.0f;
+inline constexpr float kCaptionMenuGap           = 2.0f;
+inline constexpr float kCaptionMenuIconSize      = 16.0f;
+inline constexpr float kCaptionMenuIconGap       = 10.0f;
+inline constexpr float kCaptionMenuTextSize      = 13.0f;
+inline constexpr float kCaptionMenuCornerRadius  = 11.0f;
+inline constexpr float kCaptionMenuAnchorGap     = 6.0f;
+inline constexpr float kCaptionMenuShadowDpiScale = 1.0f;
+
+// Animation duration for opening/closing the menu, in milliseconds.
+// 220ms is the Apple-stock spring constant for popovers - long enough
+// to feel deliberate, short enough not to delay the user.
+inline constexpr int kCaptionMenuAnimDurationMs = 220;
+
 // Default initial window size in logical pt.
 inline constexpr int kDefaultWindowWidth  = 880;
 inline constexpr int kDefaultWindowHeight = 560;
@@ -163,6 +186,12 @@ struct Palette {
     Color captionButtonHover;   // translucent overlay added on hover
     Color captionButtonPressed; // slightly stronger overlay on press
 
+    // Caption "more" menu (Liquid Glass dropdown).
+    Color captionMenuFill;          // panel base fill
+    Color captionMenuTopHighlight;  // thin highlight band along the top
+    Color captionMenuRowHover;      // translucent overlay for hovered row
+    Color captionMenuText;          // label + icon colour
+
     // Text
     Color text;
     Color textMuted;
@@ -202,6 +231,11 @@ inline constexpr Palette kDarkPalette{
     .captionButtonGlyph   = Color::FromARGB(0xCCEDEDEF),
     .captionButtonHover   = Color::FromARGB(0x40FFFFFF),
     .captionButtonPressed = Color::FromARGB(0x55FFFFFF),
+
+    .captionMenuFill         = Color::FromARGB(0xE82A2A2E),
+    .captionMenuTopHighlight = Color::FromARGB(0x33FFFFFF),
+    .captionMenuRowHover     = Color::FromARGB(0x33FFFFFF),
+    .captionMenuText         = Color::FromARGB(0xFFEDEDEF),
 
     .text      = Color::FromARGB(0xFFEDEDEF),
     .textMuted = Color::FromARGB(0x99EDEDEF),
@@ -247,6 +281,11 @@ inline constexpr Palette kLightPalette{
     .captionButtonGlyph   = Color::FromARGB(0xCC1A1A1C),
     .captionButtonHover   = Color::FromARGB(0x14000000),
     .captionButtonPressed = Color::FromARGB(0x22000000),
+
+    .captionMenuFill         = Color::FromARGB(0xE8F4F4F6),
+    .captionMenuTopHighlight = Color::FromARGB(0x66FFFFFF),
+    .captionMenuRowHover     = Color::FromARGB(0x14000000),
+    .captionMenuText         = Color::FromARGB(0xFF1A1A1C),
 
     .text      = Color::FromARGB(0xFF1A1A1C),
     .textMuted = Color::FromARGB(0x991A1A1C),
