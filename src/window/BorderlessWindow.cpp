@@ -150,8 +150,8 @@ HWND BorderlessWindow::Create(HINSTANCE hInstance, const wchar_t* title) {
     {
         RECT rc{};
         ::GetClientRect(hwnd, &rc);
-        const int marginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
-        const int sqW = std::max(1, static_cast<int>(rc.right - rc.left) - 2 * marginPx);
+        const int innerMarginPx = theme::ToPxInt(theme::kShadowMargin, dpi_);
+        const int sqW = std::max(1, static_cast<int>(rc.right - rc.left) - 2 * innerMarginPx);
         caption_button_.UpdateLayout(sqW, dpi_);
     }
     Trace("caption-button layout done");
@@ -693,7 +693,6 @@ LRESULT BorderlessWindow::HitTest(POINT pt) const {
     }
     if (tab_bar_.HitTest(static_cast<float>(wx), static_cast<float>(wy))) {
         return HTCLIENT;
-    }
     }
     if (settings_.IsOpen() && settings_.HitTestDone(wx, wy)) {
         // Done pill (settings sheet's caption-strip button) - clickable,

@@ -270,7 +270,9 @@ void TabBar::Render(ID2D1DeviceContext* dc,
             brush->SetColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, xAlpha));
 
             ComPtr<ID2D1PathGeometry> xPath;
-            if (SUCCEEDED(dc->GetFactory()->CreatePathGeometry(xPath.GetAddressOf()))) {
+            ComPtr<ID2D1Factory> xFactory;
+            dc->GetFactory(xFactory.GetAddressOf());
+            if (xFactory && SUCCEEDED(xFactory->CreatePathGeometry(xPath.GetAddressOf()))) {
                 ComPtr<ID2D1GeometrySink> sink;
                 xPath->Open(sink.GetAddressOf());
                 sink->BeginFigure(D2D1::Point2F(cx - arm, cy - arm),
@@ -287,8 +289,8 @@ void TabBar::Render(ID2D1DeviceContext* dc,
                 D2D1_STROKE_STYLE_PROPERTIES sp{};
                 sp.startCap = D2D1_CAP_STYLE_ROUND;
                 sp.endCap   = D2D1_CAP_STYLE_ROUND;
-                dc->GetFactory()->CreateStrokeStyle(sp, nullptr, 0,
-                                                    ss.GetAddressOf());
+                xFactory->CreateStrokeStyle(sp, nullptr, 0,
+                                            ss.GetAddressOf());
                 dc->DrawGeometry(xPath.Get(), brush, 1.5f, ss.Get());
             }
         }
@@ -314,7 +316,9 @@ void TabBar::Render(ID2D1DeviceContext* dc,
         brush->SetColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, plusAlpha));
 
         ComPtr<ID2D1PathGeometry> plusPath;
-        if (SUCCEEDED(dc->GetFactory()->CreatePathGeometry(plusPath.GetAddressOf()))) {
+        ComPtr<ID2D1Factory> plusFactory;
+        dc->GetFactory(plusFactory.GetAddressOf());
+        if (plusFactory && SUCCEEDED(plusFactory->CreatePathGeometry(plusPath.GetAddressOf()))) {
             ComPtr<ID2D1GeometrySink> sink;
             plusPath->Open(sink.GetAddressOf());
             // horizontal bar
@@ -333,8 +337,8 @@ void TabBar::Render(ID2D1DeviceContext* dc,
             D2D1_STROKE_STYLE_PROPERTIES sp{};
             sp.startCap = D2D1_CAP_STYLE_ROUND;
             sp.endCap   = D2D1_CAP_STYLE_ROUND;
-            dc->GetFactory()->CreateStrokeStyle(sp, nullptr, 0,
-                                                ss.GetAddressOf());
+            plusFactory->CreateStrokeStyle(sp, nullptr, 0,
+                                           ss.GetAddressOf());
             dc->DrawGeometry(plusPath.Get(), brush, 1.5f, ss.Get());
         }
     }

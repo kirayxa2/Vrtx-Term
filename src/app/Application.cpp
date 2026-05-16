@@ -158,7 +158,7 @@ int Application::Run(HINSTANCE hInstance) {
             ru ? L"Сбросить терминал" : L"Reset terminal",
             [this]() {
                 const char kReset[] = "\x1b[H\x1b[2J\x1b[3J\x1b[0m";
-                session_.SendInput(kReset, sizeof(kReset) - 1);
+                sessions_[active_tab_]->SendInput(kReset, sizeof(kReset) - 1);
             }
         });
 
