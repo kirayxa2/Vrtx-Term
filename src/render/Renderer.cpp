@@ -612,8 +612,14 @@ void Renderer::EnsureTitleLayout(int cols, int rows) {
         }
         if (title_fmt_) {
             title_fmt_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-            title_fmt_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            title_fmt_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            // LEADING (not CENTER): we centre the layout ourselves at draw
+            // time using the measured text width and the swap-chain width.
+            // If we used CENTER alignment here, the text would centre
+            // inside the layout's huge 16384px box and end up rendered
+            // ~8000px to the right of our origin point - completely off
+            // screen. That's why the title was invisible.
+            title_fmt_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            title_fmt_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
         }
     }
     if (!title_fmt_ || !dwrite_factory_) return;
