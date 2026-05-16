@@ -589,13 +589,27 @@ void Renderer::EnsureTitleLayout(int cols, int rows) {
         cached_shell_ = L"shell";
     }
 
+    // Caption title uses the system UI font (Segoe UI on every Windows
+    // 10/11 box) at SemiBold. Cascadia Code is monospace and looks out
+    // of place in a centred title; it also doesn't ship a SemiBold cut
+    // on every machine, which used to make CreateTextFormat fail
+    // silently and the title disappear entirely.
     if (!title_fmt_ && dwrite_factory_) {
         const float fontPx = theme::ToPx(theme::kCaptionTitleSize, dpi_);
-        dwrite_factory_->CreateTextFormat(
-            theme::kTerminalFontFamily, nullptr,
+        HRESULT hr = dwrite_factory_->CreateTextFormat(
+            L"Segoe UI", nullptr,
             DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
             DWRITE_FONT_STRETCH_NORMAL,
             fontPx, L"en-us", title_fmt_.GetAddressOf());
+        if (FAILED(hr) || !title_fmt_) {
+            // Last-resort fallback: empty family name -> default UI font.
+            title_fmt_.Reset();
+            dwrite_factory_->CreateTextFormat(
+                L"", nullptr,
+                DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL,
+                fontPx, L"en-us", title_fmt_.GetAddressOf());
+        }
         if (title_fmt_) {
             title_fmt_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
             title_fmt_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
