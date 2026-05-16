@@ -446,10 +446,50 @@ void Renderer::Render(bool windowActive,
         if (title_layout_) {
             DWRITE_TEXT_METRICS tm{};
             title_layout_->GetMetrics(&tm);
-            const float titleX = (swW - tm.width) * 0.5f;
+
+            // Folder icon ("📁" in macOS Terminal). Drawn as two
+            // rounded rectangles in monochrome — a small tab on top
+            // and a wider body below. Sized like a 14×11pt pictogram
+            // and placed immediately to the left of the title with a
+            // 6pt gap; the icon+text pair is centred as a whole inside
+            // the caption strip.
+            const float iconW = theme::ToPx(14.0f, dpi_);
+            const float iconH = theme::ToPx(11.0f, dpi_);
+            const float gap   = theme::ToPx(6.0f,  dpi_);
+            const float r     = std::max(1.0f, theme::ToPx(1.2f, dpi_));
+
+            const float totalW = iconW + gap + tm.width;
+            const float startX = std::max(0.0f, (swW - totalW) * 0.5f);
+            const float iconX  = startX;
+            const float iconY  = (captionPx - iconH) * 0.5f;
+            const float titleX = startX + iconW + gap;
             const float titleY = (captionPx - tm.height) * 0.5f;
-            brush_->SetColor(ToD2D(windowActive ? pal.captionTitle
-                                                : pal.captionTitleMuted));
+
+            const auto iconColor = ToD2D(windowActive ? pal.captionTitle
+                                                      : pal.captionTitleMuted);
+            brush_->SetColor(iconColor);
+
+            // Tab: top-left, ~45%w × 40%h.
+            const D2D1_ROUNDED_RECT tab{
+                D2D1::RectF(iconX,
+                            iconY,
+                            iconX + iconW * 0.45f,
+                            iconY + iconH * 0.40f),
+                r, r
+            };
+            // Body: full width, starting ~28% from the top so the tab
+            // visibly sticks out above it.
+            const D2D1_ROUNDED_RECT body{
+                D2D1::RectF(iconX,
+                            iconY + iconH * 0.28f,
+                            iconX + iconW,
+                            iconY + iconH),
+                r, r
+            };
+            d2d_dc_->FillRoundedRectangle(tab,  brush_.Get());
+            d2d_dc_->FillRoundedRectangle(body, brush_.Get());
+
+            // Title text (re-uses the same brush colour).
             d2d_dc_->DrawTextLayout(D2D1::Point2F(titleX, titleY),
                                     title_layout_.Get(), brush_.Get(),
                                     D2D1_DRAW_TEXT_OPTIONS_CLIP);
