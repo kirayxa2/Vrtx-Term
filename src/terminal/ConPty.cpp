@@ -331,8 +331,8 @@ bool ConPty::Start(int cols, int rows, ShellKind kind,
         nullptr, nullptr,
         FALSE,                          // bInheritHandles - explicitly FALSE.
         creationFlags,
-        envBlock.empty() ? nullptr : envBlock.data(),
-        nullptr, nullptr,
+        envBlock.empty() ? nullptr : envBlock.data(),  // lpEnvironment
+        nullptr,                        // lpCurrentDirectory
         &si.StartupInfo,
         &pi);
 
