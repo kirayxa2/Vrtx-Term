@@ -57,6 +57,66 @@ std::wstring QuoteArg(const std::wstring& s) {
     return out;
 }
 
+// Directory portion of a path (everything before the last separator).
+std::wstring DirOf(const std::wstring& path) {
+    const size_t slash = path.find_last_of(L"\\/");
+    return slash == std::wstring::npos ? std::wstring() : path.substr(0, slash);
+}
+
+// Case-insensitive test for an "KEY=" prefix on an environment entry.
+bool EnvEntryHasKey(const wchar_t* entry, const wchar_t* key) {
+    size_t i = 0;
+    for (; key[i]; ++i) {
+        if (!entry[i] || ::towlower(entry[i]) != ::towlower(key[i])) return false;
+    }
+    return entry[i] == L'=';
+}
+
+// Build a CREATE_UNICODE_ENVIRONMENT block: the parent environment plus the
+// variables MSYS2 needs to behave like a proper interactive shell.
+//
+//   MSYSTEM=MSYS         selects the base POSIX environment - this is what
+//                        puts /usr/bin on PATH (so pacman and the rest of
+//                        the core tools resolve) and drives the prompt set
+//                        up by /etc/profile.
+//   MSYS2_PATH_TYPE=inherit  keeps the Windows PATH visible inside bash, so
+//                        users can still call git.exe / where.exe / etc.
+//
+// Any pre-existing copies of those keys are dropped so ours win.
+std::vector<wchar_t> BuildMsys2Env() {
+    std::vector<wchar_t> out;
+    auto appendVar = [&out](const wchar_t* kv) {
+        for (const wchar_t* p = kv; *p; ++p) out.push_back(*p);
+        out.push_back(L'\0');
+    };
+
+    static const wchar_t* const kOurKeys[] = {
+        L"MSYSTEM", L"CHERE_INVOKING", L"MSYS2_PATH_TYPE",
+    };
+
+    if (LPWCH env = ::GetEnvironmentStringsW()) {
+        for (LPWCH p = env; *p;) {
+            const size_t len = ::wcslen(p);
+            bool drop = false;
+            for (const wchar_t* key : kOurKeys) {
+                if (EnvEntryHasKey(p, key)) { drop = true; break; }
+            }
+            if (!drop) {
+                out.insert(out.end(), p, p + len);
+                out.push_back(L'\0');
+            }
+            p += len + 1;
+        }
+        ::FreeEnvironmentStringsW(env);
+    }
+
+    appendVar(L"MSYSTEM=MSYS");
+    appendVar(L"MSYS2_PATH_TYPE=inherit");
+
+    out.push_back(L'\0');  // double-null terminator for the block.
+    return out;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -85,6 +145,53 @@ std::wstring ConPty::ResolveShell() {
         if (FileExists(candidate)) return candidate;
     }
     return L"cmd.exe";
+}
+
+std::wstring ConPty::ResolveCmd() {
+    if (auto sysroot = EnvVar(L"SystemRoot"); !sysroot.empty()) {
+        std::wstring candidate = sysroot + L"\\System32\\cmd.exe";
+        if (FileExists(candidate)) return candidate;
+    }
+    return L"cmd.exe";
+}
+
+std::wstring ConPty::ResolveMsys2Bash() {
+    // A real MSYS2 install keeps bash.exe and pacman.exe side by side in
+    // <root>\usr\bin. We require BOTH so we don't accidentally launch
+    // Git-Bash or WSL's bash (neither of which has pacman) when the user
+    // asked specifically for the MSYS2 experience.
+    auto tryRoot = [](const std::wstring& root) -> std::wstring {
+        if (root.empty()) return L"";
+        const std::wstring bash   = root + L"\\usr\\bin\\bash.exe";
+        const std::wstring pacman = root + L"\\usr\\bin\\pacman.exe";
+        if (FileExists(bash) && FileExists(pacman)) return bash;
+        return L"";
+    };
+
+    // 1) Explicit override - lets power users point us at any install.
+    if (auto r = tryRoot(EnvVar(L"MSYS2_ROOT")); !r.empty()) return r;
+
+    // 2) Conventional install roots. winget and the official installer
+    //    default to <SystemDrive>\msys64.
+    std::wstring drive = EnvVar(L"SystemDrive");
+    if (drive.empty()) drive = L"C:";
+    for (const wchar_t* name : {L"\\msys64", L"\\msys32"}) {
+        if (auto r = tryRoot(drive + name); !r.empty()) return r;
+    }
+
+    // 3) Scoop user install.
+    if (auto up = EnvVar(L"USERPROFILE"); !up.empty()) {
+        if (auto r = tryRoot(up + L"\\scoop\\apps\\msys2\\current"); !r.empty())
+            return r;
+    }
+
+    // 4) Last resort: bash.exe on PATH, accepted only if pacman.exe lives
+    //    next to it (i.e. it really is an MSYS2 bash).
+    if (auto p = SearchOnPath(L"bash.exe"); !p.empty()) {
+        const std::wstring dir = DirOf(p);
+        if (!dir.empty() && FileExists(dir + L"\\pacman.exe")) return p;
+    }
+    return L"";
 }
 
 // ---- Startup-info plumbing ------------------------------------------------
@@ -121,7 +228,8 @@ bool ConPty::PrepareStartupInfo(STARTUPINFOEXW& si,
 
 // ---- Start ----------------------------------------------------------------
 
-bool ConPty::Start(int cols, int rows, const std::wstring& cmdline) {
+bool ConPty::Start(int cols, int rows, ShellKind kind,
+                   const std::wstring& cmdline) {
     if (running_.load()) return false;
 
     // 1) Two pipes:
@@ -154,29 +262,57 @@ bool ConPty::Start(int cols, int rows, const std::wstring& cmdline) {
     ::CloseHandle(child_in_);  child_in_  = nullptr;
     ::CloseHandle(child_out_); child_out_ = nullptr;
 
-    // 2) Resolve shell + build command line.
-    shell_path_ = cmdline.empty() ? ResolveShell() : cmdline;
-
-    // For PowerShell we inject our own minimal profile (rounded prompt,
-    // no oh-my-posh, no winfetch). The user's $PROFILE is suppressed via
-    // -NoProfile so we get a deterministic look out of the box. cmd.exe
-    // and any caller-supplied custom command line are launched as-is.
+    // 2) Resolve shell + build command line (and, for MSYS2, a custom
+    //    environment block so the prompt and pacman work).
+    //
+    // A non-empty `cmdline` overrides everything and is launched verbatim.
+    // Otherwise we branch on `kind`.
     std::wstring fullCmd;
-    if (cmdline.empty() && IsPowerShell(shell_path_)) {
-        const std::wstring profile = EnsureDefaultPwshProfile();
-        fullCmd = QuoteArg(shell_path_);
-        fullCmd += L" -NoLogo -NoProfile -NoExit";
-        if (!profile.empty()) {
-            // -File runs the script and stays interactive thanks to
-            // -NoExit; we cannot use -File on Windows PowerShell 5.1
-            // together with -NoExit reliably, so we use `. <path>` via
-            // -Command which works on both pwsh 7+ and powershell 5.1.
-            fullCmd += L" -Command \". '";
-            fullCmd += profile;
-            fullCmd += L"'\"";
+    std::vector<wchar_t> envBlock;  // empty => inherit parent (nullptr).
+    DWORD creationFlags = EXTENDED_STARTUPINFO_PRESENT;
+
+    if (!cmdline.empty()) {
+        shell_path_ = cmdline;
+        fullCmd     = cmdline;
+    } else if (kind == ShellKind::Msys2Bash) {
+        shell_path_ = ResolveMsys2Bash();
+        if (shell_path_.empty()) {
+            // No MSYS2 install found - let the caller surface a hint.
+            CleanupHandles();
+            return false;
         }
+        // --login sources /etc/profile (puts /usr/bin on PATH so pacman and
+        // friends resolve, and sets up the MSYS2 environment); -i makes the
+        // shell interactive so ~/.bashrc with the coloured PS1 prompt runs.
+        fullCmd       = QuoteArg(shell_path_) + L" --login -i";
+        envBlock      = BuildMsys2Env();
+        creationFlags |= CREATE_UNICODE_ENVIRONMENT;
+    } else if (kind == ShellKind::Cmd) {
+        shell_path_ = ResolveCmd();
+        fullCmd     = shell_path_;
     } else {
-        fullCmd = shell_path_;
+        // Auto / PowerShell. Resolve the PowerShell family and inject our
+        // own minimal profile (rounded prompt, no oh-my-posh, no winfetch).
+        // The user's $PROFILE is suppressed via -NoProfile so we get a
+        // deterministic look out of the box. If Auto falls all the way
+        // through to cmd.exe it is launched as-is.
+        shell_path_ = ResolveShell();
+        if (IsPowerShell(shell_path_)) {
+            const std::wstring profile = EnsureDefaultPwshProfile();
+            fullCmd = QuoteArg(shell_path_);
+            fullCmd += L" -NoLogo -NoProfile -NoExit";
+            if (!profile.empty()) {
+                // -File runs the script and stays interactive thanks to
+                // -NoExit; we cannot use -File on Windows PowerShell 5.1
+                // together with -NoExit reliably, so we use `. <path>` via
+                // -Command which works on both pwsh 7+ and powershell 5.1.
+                fullCmd += L" -Command \". '";
+                fullCmd += profile;
+                fullCmd += L"'\"";
+            }
+        } else {
+            fullCmd = shell_path_;
+        }
     }
     std::wstring mutableCmd = fullCmd;  // CreateProcessW may modify the buffer.
 
@@ -194,7 +330,8 @@ bool ConPty::Start(int cols, int rows, const std::wstring& cmdline) {
         mutableCmd.data(),
         nullptr, nullptr,
         FALSE,                          // bInheritHandles - explicitly FALSE.
-        EXTENDED_STARTUPINFO_PRESENT,
+        creationFlags,
+        envBlock.empty() ? nullptr : envBlock.data(),
         nullptr, nullptr,
         &si.StartupInfo,
         &pi);

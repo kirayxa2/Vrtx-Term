@@ -20,7 +20,11 @@ private:
     std::vector<std::unique_ptr<terminal::TerminalSession>> sessions_;
     int active_tab_{0};
 
-    void OpenNewTab();
+    // Which shell the "+" new-tab button (and the first tab) launches.
+    // Changed from the Settings sheet's "Default shell" row.
+    terminal::ShellKind default_shell_{terminal::ShellKind::Auto};
+
+    void OpenNewTab(terminal::ShellKind kind);
     void CloseTab(int index);
     void SwitchTab(int index);
     void RebuildTabBar();

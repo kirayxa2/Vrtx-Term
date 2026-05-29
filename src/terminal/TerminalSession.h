@@ -39,8 +39,10 @@ public:
     TerminalSession(const TerminalSession&)            = delete;
     TerminalSession& operator=(const TerminalSession&) = delete;
 
-    // Spawn the shell at the requested grid size. Returns false on failure.
-    bool Start(int cols, int rows);
+    // Spawn the shell at the requested grid size. `kind` selects which
+    // shell family to launch (PowerShell, MSYS2 bash, ...). Returns false
+    // on failure - e.g. a Msys2Bash request when MSYS2 is not installed.
+    bool Start(int cols, int rows, ShellKind kind = ShellKind::Auto);
 
     // Update grid size; ResizePseudoConsole notifies the shell.
     void Resize(int cols, int rows);

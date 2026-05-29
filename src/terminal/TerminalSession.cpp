@@ -17,7 +17,7 @@ TerminalSession::~TerminalSession() {
     Stop();
 }
 
-bool TerminalSession::Start(int cols, int rows) {
+bool TerminalSession::Start(int cols, int rows, ShellKind kind) {
     cols = std::max(1, cols);
     rows = std::max(1, rows);
     buffer_.Resize(cols, rows);
@@ -29,7 +29,7 @@ bool TerminalSession::Start(int cols, int rows) {
         if (repaint_) repaint_();
     });
 
-    return pty_.Start(cols, rows);
+    return pty_.Start(cols, rows, kind);
 }
 
 void TerminalSession::Resize(int cols, int rows) {
