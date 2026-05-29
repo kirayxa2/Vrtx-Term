@@ -20,6 +20,31 @@ void Trace(const char* msg) {
     }
 }
 
+// A short, lower-cased display name for a shell executable path, used as
+// the tab title. e.g. "C:\\msys64\\usr\\bin\\bash.exe" -> "bash",
+// "...\\pwsh.exe" -> "pwsh". Falls back to "shell".
+std::wstring FriendlyShellName(const std::wstring& path) {
+    if (path.empty()) return L"shell";
+    const size_t slash = path.find_last_of(L"\\/");
+    std::wstring name = (slash == std::wstring::npos) ? path
+                                                      : path.substr(slash + 1);
+    const size_t dot = name.rfind(L'.');
+    if (dot != std::wstring::npos) name = name.substr(0, dot);
+    for (auto& c : name) c = static_cast<wchar_t>(::towlower(c));
+    return name.empty() ? L"shell" : name;
+}
+
+// Localised label for the Settings "Default shell" value cell.
+std::wstring ShellLabel(terminal::ShellKind k, bool ru) {
+    switch (k) {
+        case terminal::ShellKind::Msys2Bash: return L"MSYS2 bash";
+        case terminal::ShellKind::Cmd:       return L"cmd.exe";
+        case terminal::ShellKind::PowerShell:return L"PowerShell";
+        case terminal::ShellKind::Auto:
+        default: return ru ? L"Авто (PowerShell)" : L"Auto (PowerShell)";
+    }
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -29,24 +54,43 @@ void Trace(const char* msg) {
 void Application::RebuildTabBar() {
     std::vector<ui::Tab> tabs;
     for (int i = 0; i < static_cast<int>(sessions_.size()); ++i) {
-        const std::wstring title = L"bash";
+        std::wstring title = FriendlyShellName(sessions_[i]->ShellPath());
+        if (title.empty()) title = L"shell";
         tabs.push_back({title, i == active_tab_});
     }
     window_.GetTabBar().SetTabs(std::move(tabs), active_tab_);
     window_.RelayoutTabBar();
 }
 
-void Application::OpenNewTab() {
+void Application::OpenNewTab(terminal::ShellKind kind) {
     auto s = std::make_unique<terminal::TerminalSession>();
     int cols = 80, rows = 24;
     // Inherit current grid size from renderer.
     // (Don't have direct access here — use a reasonable default;
     //  SyncPtyToSize in SetSession will correct it on the next WM_SIZE.)
-    bool ok = s->Start(cols, rows);
+    bool ok = s->Start(cols, rows, kind);
     if (!ok) {
-        window_.ShowAlert(L"Failed to launch shell",
-                          L"Could not open a new terminal session.",
-                          L"OK");
+        const LANGID langId = ::GetUserDefaultUILanguage();
+        const bool   ru     = (PRIMARYLANGID(langId) == LANG_RUSSIAN);
+        if (kind == terminal::ShellKind::Msys2Bash) {
+            // MSYS2 isn't installed (or has no pacman beside bash).
+            window_.ShowAlert(
+                ru ? L"MSYS2 не найден" : L"MSYS2 not found",
+                ru ? L"Не удалось найти установленный MSYS2 (bash и pacman). "
+                     L"Установите MSYS2 с msys2.org или командой "
+                     L"\"winget install MSYS2.MSYS2\", затем попробуйте снова."
+                   : L"Could not find an MSYS2 install (bash + pacman). "
+                     L"Install MSYS2 from msys2.org or run "
+                     L"\"winget install MSYS2.MSYS2\", then try again.",
+                L"OK");
+        } else {
+            window_.ShowAlert(
+                ru ? L"Не удалось запустить оболочку"
+                   : L"Failed to launch shell",
+                ru ? L"Не удалось открыть новую сессию терминала."
+                   : L"Could not open a new terminal session.",
+                L"OK");
+        }
         return;
     }
 
@@ -97,7 +141,7 @@ int Application::Run(HINSTANCE hInstance) {
     // Wire tab-bar callbacks BEFORE creating the first session.
     {
         auto& tb = window_.GetTabBar();
-        tb.SetOnNewTab ([this]()      { OpenNewTab();  });
+        tb.SetOnNewTab ([this]()      { OpenNewTab(default_shell_); });
         tb.SetOnClose  ([this](int i) { CloseTab(i);   });
         tb.SetOnSwitch ([this](int i) { SwitchTab(i);  });
     }
@@ -159,6 +203,16 @@ int Application::Run(HINSTANCE hInstance) {
             [this]() {
                 const char kReset[] = "\x1b[H\x1b[2J\x1b[3J\x1b[0m";
                 sessions_[active_tab_]->SendInput(kReset, sizeof(kReset) - 1);
+            }
+        });
+
+        // New MSYS2 bash tab: opens a real bash login shell (with pacman).
+        // Shows a friendly hint if MSYS2 isn't installed.
+        menu.AddItem({
+            L"\u276F",   // U+276F HEAVY RIGHT-POINTING ANGLE QUOTE (chevron)
+            ru ? L"Новая вкладка bash" : L"New bash tab",
+            [this]() {
+                OpenNewTab(terminal::ShellKind::Msys2Bash);
             }
         });
 
@@ -462,6 +516,34 @@ int Application::Run(HINSTANCE hInstance) {
         }
     }
     Trace("settings sections configured");
+
+    // Wire the "Default shell" row (General > AT LAUNCH > row 2) so tapping
+    // it cycles Auto (PowerShell) -> MSYS2 bash -> cmd.exe and applies the
+    // choice to the "+" new-tab button. The value cell re-reads its string
+    // from the model every frame, so we just mutate it and force a repaint.
+    {
+        auto& s = window_.GetSettings();
+        if (auto* row = s.RowAt(0, 0, 2)) {
+            row->value        = ShellLabel(default_shell_, ru);
+            row->show_chevron = true;
+            row->enabled      = true;
+            row->on_pick = [this, ru]() {
+                switch (default_shell_) {
+                    case terminal::ShellKind::Auto:
+                        default_shell_ = terminal::ShellKind::Msys2Bash; break;
+                    case terminal::ShellKind::Msys2Bash:
+                        default_shell_ = terminal::ShellKind::Cmd; break;
+                    default:
+                        default_shell_ = terminal::ShellKind::Auto; break;
+                }
+                if (auto* r = window_.GetSettings().RowAt(0, 0, 2)) {
+                    r->value = ShellLabel(default_shell_, ru);
+                }
+                // Nudge a repaint so the new value shows immediately.
+                ::InvalidateRect(window_.Hwnd(), nullptr, FALSE);
+            };
+        }
+    }
 
     MSG msg{};
     while (::GetMessageW(&msg, nullptr, 0, 0) > 0) {

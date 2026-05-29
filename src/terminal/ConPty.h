@@ -13,11 +13,17 @@
 //
 //     ResizePseudoConsole(cols, rows)  -> shell sees SIGWINCH equivalent.
 //
-// We resolve the shell at Start() time:
-//     1. pwsh.exe via PATH
-//     2. PowerShell 7 default install location
-//     3. powershell.exe (built-in PS 5.1)
-//     4. cmd.exe (last resort)
+// We resolve the shell at Start() time. Which shell depends on the
+// requested ShellKind:
+//   Auto       -> 1. pwsh.exe via PATH
+//                 2. PowerShell 7 default install location
+//                 3. powershell.exe (built-in PS 5.1)
+//                 4. cmd.exe (last resort)
+//   PowerShell -> same as Auto but never falls through to cmd silently.
+//   Msys2Bash  -> a real MSYS2 install (bash.exe with pacman.exe beside it),
+//                 launched as a login+interactive shell with MSYSTEM set so
+//                 the prompt and pacman / the package manager work.
+//   Cmd        -> the built-in cmd.exe.
 //
 // All public methods are safe to call from the UI thread. The reader thread
 // is internal and joined in Stop()/dtor.
@@ -35,6 +41,15 @@ namespace vrtx::terminal {
 using OnPtyOutputFn = std::function<void(const char* data, size_t len)>;
 using OnPtyExitFn   = std::function<void(uint32_t exitCode)>;
 
+// Which kind of shell to launch. See the file header for the resolution
+// order behind each value.
+enum class ShellKind {
+    Auto,        // pwsh > PS7 > powershell > cmd (default, legacy behaviour)
+    PowerShell,  // force PowerShell + the Vrtx default profile
+    Msys2Bash,   // MSYS2 login bash with a working prompt + pacman
+    Cmd,         // the built-in cmd.exe
+};
+
 class ConPty {
 public:
     ConPty();
@@ -46,9 +61,13 @@ public:
     // Spawn a shell with an attached pseudo-console of `cols` x `rows`.
     // Returns false on error (and leaves the object in a clean state).
     //
-    // `cmdline` may be empty - we then auto-pick a shell. Pass an explicit
-    // command line (e.g. L"cmd.exe /k") to override.
-    bool Start(int cols, int rows, const std::wstring& cmdline = L"");
+    // `kind` selects which shell family to launch (see ShellKind). When
+    // `cmdline` is non-empty it overrides everything and is launched
+    // verbatim (e.g. L"cmd.exe /k"). A Msys2Bash request returns false if
+    // no MSYS2 install is found - the caller should surface that to the
+    // user (e.g. "install MSYS2").
+    bool Start(int cols, int rows, ShellKind kind = ShellKind::Auto,
+               const std::wstring& cmdline = L"");
 
     // Idempotent: terminates the child if running, joins the reader thread,
     // and releases all handles.
@@ -72,6 +91,11 @@ public:
 
 private:
     static std::wstring ResolveShell();
+    // Locate a usable MSYS2 bash.exe (one that has pacman.exe beside it).
+    // Returns an empty string when no MSYS2 install can be found.
+    static std::wstring ResolveMsys2Bash();
+    // Absolute path to the built-in cmd.exe.
+    static std::wstring ResolveCmd();
     void   ReaderLoop();
     void   CleanupHandles();
 
