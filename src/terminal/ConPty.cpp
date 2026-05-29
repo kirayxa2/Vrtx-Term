@@ -171,12 +171,26 @@ std::wstring ConPty::ResolveMsys2Bash() {
     // 1) Explicit override - lets power users point us at any install.
     if (auto r = tryRoot(EnvVar(L"MSYS2_ROOT")); !r.empty()) return r;
 
-    // 2) Conventional install roots. winget and the official installer
-    //    default to <SystemDrive>\msys64.
-    std::wstring drive = EnvVar(L"SystemDrive");
-    if (drive.empty()) drive = L"C:";
-    for (const wchar_t* name : {L"\\msys64", L"\\msys32"}) {
-        if (auto r = tryRoot(drive + name); !r.empty()) return r;
+    // 2) Conventional install roots (\msys64 / \msys32) on EVERY drive
+    //    present in the system, not just C:. MSYS2 is portable and is very
+    //    often installed on a secondary drive (D:, E:, ...). We probe the
+    //    system drive first so a typical install is found immediately.
+    {
+        std::vector<std::wstring> drives;
+        if (auto sys = EnvVar(L"SystemDrive"); !sys.empty()) drives.push_back(sys);
+        const DWORD mask = ::GetLogicalDrives();
+        for (int i = 0; i < 26; ++i) {
+            if (!(mask & (1u << i))) continue;
+            std::wstring d(1, static_cast<wchar_t>(L'A' + i));
+            d += L':';
+            if (std::find(drives.begin(), drives.end(), d) == drives.end())
+                drives.push_back(d);
+        }
+        for (const auto& drive : drives) {
+            for (const wchar_t* name : {L"\\msys64", L"\\msys32"}) {
+                if (auto r = tryRoot(drive + name); !r.empty()) return r;
+            }
+        }
     }
 
     // 3) Scoop user install.
